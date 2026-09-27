@@ -51,9 +51,12 @@ When GG.deals adds a wishlist endpoint, the only change needed is a new `IGGDeal
 
 ## Install
 
-1. Run `powershell -ExecutionPolicy Bypass -File build/pack.ps1`. This runs the tests, builds the Release version and writes `dist/*.pext`.
+1. Download the `.pext` file from the [latest release](https://github.com/Kyerstorm/Playnite-GG-Deals-Integration/releases/latest).
 2. Drag the `.pext` file onto Playnite, or open it with Playnite.
 3. Open **GG.deals Wishlist** in the sidebar and paste your API key from your GG.deals account.
+4. Optional: in the extension settings, set **Wishlist source** to **My Steam wishlist** and enter your SteamID64.
+
+To build it yourself, run `powershell -ExecutionPolicy Bypass -File build/pack.ps1`. This runs the tests, builds the Release version and writes `dist/*.pext`.
 
 ## Development
 
@@ -81,4 +84,6 @@ The extension's data files live in its Playnite user-data folder:
 
 Both JSON files carry a `DataVersion`. A corrupt file is quarantined and never crashes Playnite. A file from a newer version is backed up before it is replaced.
 
-Not affiliated with GG.deals.
+## License
+
+[MIT](LICENSE). Not affiliated with GG.deals or Valve.
