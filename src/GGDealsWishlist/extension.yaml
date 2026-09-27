@@ -1,0 +1,10 @@
+Id: GGDealsWishlist_42520b12-2e2a-4c08-a4ec-bcdf317f93f5
+Name: GG.deals Wishlist
+Author: Kyerstorm
+Version: 1.0.0
+Module: GGDealsWishlist.dll
+Type: GenericPlugin
+Icon: icon.png
+Links:
+  - Name: GG.deals
+    Url: https://gg.deals/

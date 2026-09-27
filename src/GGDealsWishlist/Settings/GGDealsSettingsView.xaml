@@ -1,0 +1,278 @@
+<UserControl x:Class="GGDealsWishlist.Settings.GGDealsSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:GGDealsWishlist.Views"
+             xmlns:vm="clr-namespace:GGDealsWishlist.ViewModels"
+             x:Name="Root"
+             Foreground="{DynamicResource GG.Text}">
+    <UserControl.Resources>
+        <v:BoolToVisibilityConverter x:Key="Vis" />
+        <v:BoolToVisibilityConverter x:Key="InvVis" Invert="True" />
+
+        <Style x:Key="Section" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,22,0,8" />
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0,2,0,6" />
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+        </Style>
+        <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="Margin" Value="0,4" />
+            <Setter Property="Foreground" Value="{DynamicResource GG.Text}" />
+        </Style>
+        <Style x:Key="Action" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Padding" Value="12,4" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+        </Style>
+        <Style x:Key="Link" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{Binding AccentPreview}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock x:Name="T" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="T" Property="TextDecorations" Value="Underline" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="Status" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,6,0,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ConnectionStatusKind}" Value="{x:Static vm:StatusKind.Success}">
+                    <Setter Property="Foreground" Value="{DynamicResource GG.Success}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ConnectionStatusKind}" Value="{x:Static vm:StatusKind.Warning}">
+                    <Setter Property="Foreground" Value="{DynamicResource GG.Warning}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ConnectionStatusKind}" Value="{x:Static vm:StatusKind.Error}">
+                    <Setter Property="Foreground" Value="{DynamicResource GG.Error}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="20,0,20,20" MaxWidth="760" HorizontalAlignment="Left">
+
+            <!-- ============================== Account / API ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="GG.deals account" Margin="0,10,0,8" />
+            <TextBlock Style="{StaticResource Hint}"
+                       Text="Prices come from the official GG.deals API. Your key is encrypted for your Windows account, is never shown after saving and is never written to logs." />
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" MaxWidth="360" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Style="{StaticResource Label}" Text="API key" />
+                <PasswordBox x:Name="ApiKeyBox" Grid.Column="1" PasswordChanged="OnApiKeyChanged" Padding="4" AutomationProperties.Name="GG.deals API key" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
+                    <Button Style="{StaticResource Action}" Content="Test connection" Command="{Binding TestConnectionCommand}" />
+                    <Button Style="{StaticResource Action}" Content="Remove key" Command="{Binding RemoveKeyCommand}" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Style="{StaticResource Hint}" Text="{Binding ApiKeyStateText}" Margin="0,6,0,0" />
+            <TextBlock Text="{Binding ApiKeyValidationText}" Foreground="{DynamicResource GG.Error}" TextWrapping="Wrap"
+                       Visibility="{Binding ApiKeyValidationText, Converter={StaticResource Vis}}" />
+            <Button Style="{StaticResource Link}" Content="Keep the saved key" HorizontalAlignment="Left" Command="{Binding UndoRemoveKeyCommand}"
+                    Visibility="{Binding IsKeyMarkedForRemoval, Converter={StaticResource Vis}}" />
+            <TextBlock Style="{StaticResource Status}" Text="{Binding ConnectionStatus}" Visibility="{Binding ConnectionStatus, Converter={StaticResource Vis}}" />
+            <Button Style="{StaticResource Link}" Content="Where do I get an API key?" Command="{Binding OpenApiInfoCommand}" HorizontalAlignment="Left" Margin="0,8,0,0" />
+
+            <Grid Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="260" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Style="{StaticResource Label}" Text="Region" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding RegionOptions}" SelectedValuePath="Code" SelectedValue="{Binding Region}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock>
+                                <Run Text="{Binding Name, Mode=OneWay}" />
+                                <Run Text="{Binding Currency, Mode=OneWay, StringFormat=({0})}" Foreground="{DynamicResource GG.TextMuted}" />
+                            </TextBlock>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Grid>
+            <TextBlock Style="{StaticResource Hint}" Text="{Binding RegionCurrencyText}" />
+
+            <TextBlock Text="API usage" FontWeight="SemiBold" Margin="0,10,0,2" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Update" Command="{Binding UpdateUsageCommand}" VerticalAlignment="Top" />
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Hint}" Margin="0" Text="{Binding UsageMinuteText}" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0" Text="{Binding UsageHourText}" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0" Text="{Binding UsageResetText}" Visibility="{Binding UsageResetText, Converter={StaticResource Vis}}" />
+                </StackPanel>
+            </DockPanel>
+
+            <!-- ============================== Refresh ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="Refresh" />
+            <CheckBox Content="Refresh automatically" IsChecked="{Binding Settings.AutoRefresh}" />
+            <Grid Margin="24,4,0,0" IsEnabled="{Binding Settings.AutoRefresh}" HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="180" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Style="{StaticResource Label}" Text="Every" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding RefreshIntervalOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Settings.RefreshIntervalMinutes}" />
+            </Grid>
+            <TextBlock Style="{StaticResource Hint}"
+                       Text="Only prices older than the interval are requested again, in batches of up to 100 games, within GG.deals' rate limits. Manual refreshes skip prices updated in the last 15 minutes." />
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <Button Style="{StaticResource Action}" Content="Refresh now" Command="{Binding RefreshNowCommand}" />
+                <TextBlock Text="{Binding ActionStatus}" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- ============================== Wishlist source ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="Wishlist source" />
+            <ComboBox ItemsSource="{Binding WishlistSourceOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding WishlistSource}" Width="320" HorizontalAlignment="Left" />
+            <TextBlock Style="{StaticResource Hint}" Visibility="{Binding IsOfficialOnly, Converter={StaticResource Vis}}"
+                       Text="GG.deals does not currently offer wishlist access through its public API. The extension never reads your wishlist by scraping web pages; it will use the official endpoint as soon as one exists. Meanwhile, choose your Steam wishlist or a manual list." />
+            <StackPanel Visibility="{Binding IsSteamWishlist, Converter={StaticResource Vis}}">
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="The games on your Steam wishlist are read with Steam's official Web API, in your Steam wishlist order. Their prices come from GG.deals. No Steam login is needed, but your wishlist must be public: in Steam, Edit Profile → Privacy Settings → Game details: Public." />
+                <DockPanel Margin="0,4,0,0">
+                    <TextBlock Style="{StaticResource Label}" Text="SteamID64" />
+                    <TextBox Text="{Binding SteamId, UpdateSourceTrigger=PropertyChanged, Delay=300}" Padding="3" MinWidth="300" MaxWidth="420" HorizontalAlignment="Left"
+                             AutomationProperties.Name="SteamID64" />
+                </DockPanel>
+                <TextBlock Style="{StaticResource Hint}" Text="Your 17-digit Steam ID (starts with 7656119) or a steamcommunity.com/profiles/… link. The wishlist refreshes together with prices." />
+                <TextBlock Text="{Binding SteamIdValidationText}" Foreground="{DynamicResource GG.Error}" TextWrapping="Wrap"
+                           Visibility="{Binding SteamIdValidationText, Converter={StaticResource Vis}}" />
+            </StackPanel>
+            <StackPanel Visibility="{Binding IsManualList, Converter={StaticResource Vis}}">
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="One game per line: a Steam app id (620), a Steam store link, or sub:/bundle: ids. Add a title after a bar if you like: 620 | Portal 2. Prices for these games come from the GG.deals API." />
+                <TextBox Text="{Binding ManualWishlist, UpdateSourceTrigger=PropertyChanged, Delay=300}" AcceptsReturn="True" TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Height="140" FontFamily="Consolas" Padding="4"
+                         AutomationProperties.Name="Manual wishlist" />
+                <TextBlock Style="{StaticResource Hint}" Text="{Binding ManualListInfo}" />
+            </StackPanel>
+            <DockPanel Margin="0,6,0,0">
+                <TextBlock Style="{StaticResource Label}" Text="GG.deals wishlist link" />
+                <TextBox Text="{Binding Settings.GGDealsWishlistUrl}" Padding="3" MaxWidth="420" HorizontalAlignment="Left" MinWidth="300" />
+            </DockPanel>
+            <TextBlock Style="{StaticResource Hint}" Text="Opened by &quot;Open GG.deals Wishlist ↗&quot;. Paste your public wishlist link here to open it directly." />
+
+            <!-- ============================== Appearance ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="Appearance" />
+            <Grid HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="240" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Style="{StaticResource Label}" Text="Default view" />
+                <ComboBox Grid.Column="1" Margin="0,3" ItemsSource="{Binding ViewModeOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Settings.DefaultViewMode}" />
+                <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Theme" />
+                <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,3" ItemsSource="{Binding ThemeOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Settings.Theme}" />
+                <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Card density" />
+                <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,3" ItemsSource="{Binding DensityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Settings.Density}" />
+                <TextBlock Grid.Row="3" Style="{StaticResource Label}" Text="Cover size" />
+                <ComboBox Grid.Row="3" Grid.Column="1" Margin="0,3" ItemsSource="{Binding CoverSizeOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Settings.CoverSize}" />
+                <TextBlock Grid.Row="4" Style="{StaticResource Label}" Text="Accent colour" />
+                <DockPanel Grid.Row="4" Grid.Column="1" Margin="0,3">
+                    <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="3" Background="{Binding AccentPreview}" BorderBrush="{DynamicResource GG.Border}" BorderThickness="1" Margin="0,0,6,0" />
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Reset" Command="{Binding ResetAccentCommand}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    <TextBox Text="{Binding AccentColor, UpdateSourceTrigger=PropertyChanged}" Padding="3" AutomationProperties.Name="Accent colour" />
+                </DockPanel>
+            </Grid>
+            <TextBlock Text="{Binding AccentValidationText}" Foreground="{DynamicResource GG.Error}" Visibility="{Binding AccentValidationText, Converter={StaticResource Vis}}" />
+            <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,6"
+                       Text="Cover art comes from Steam for Steam games. Games already in your Playnite library use their Playnite cover; games without either show a placeholder." />
+
+            <!-- ============================== Information ============================== -->
+            <DockPanel Margin="0,22,0,8">
+                <Button DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Reset to defaults" Command="{Binding ResetFieldsCommand}" VerticalAlignment="Bottom" />
+                <TextBlock Style="{StaticResource Section}" Text="Information shown" Margin="0" />
+            </DockPanel>
+            <TextBlock Text="Header" FontWeight="SemiBold" />
+            <WrapPanel>
+                <CheckBox Content="Game count" IsChecked="{Binding Settings.ShowGameCount}" Width="200" />
+                <CheckBox Content="On-sale count" IsChecked="{Binding Settings.ShowOnSaleCount}" Width="200" />
+                <CheckBox Content="Historical low count" IsChecked="{Binding Settings.ShowHistoricalLowCount}" Width="200" />
+                <CheckBox Content="Last updated time" IsChecked="{Binding Settings.ShowLastUpdated}" Width="200" />
+            </WrapPanel>
+            <TextBlock Text="Games" FontWeight="SemiBold" Margin="0,8,0,0" />
+            <WrapPanel>
+                <CheckBox Content="Cover" IsChecked="{Binding Settings.ShowCover}" Width="200" />
+                <CheckBox Content="Title" IsChecked="{Binding Settings.ShowTitle}" Width="200" />
+                <CheckBox Content="Current price" IsChecked="{Binding Settings.ShowCurrentPrice}" Width="200" />
+                <CheckBox Content="Discount" IsChecked="{Binding Settings.ShowDiscount}" Width="200" />
+                <CheckBox Content="Price source" IsChecked="{Binding Settings.ShowPriceSource}" Width="200" />
+                <CheckBox Content="Historical low" IsChecked="{Binding Settings.ShowHistoricalLow}" Width="200" />
+                <CheckBox Content="Retail price" IsChecked="{Binding Settings.ShowRetailPrice}" Width="200" />
+                <CheckBox Content="Keyshop price" IsChecked="{Binding Settings.ShowKeyshopPrice}" Width="200" />
+                <CheckBox Content="Date added to wishlist" IsChecked="{Binding Settings.ShowWishlistDate}" Width="200" />
+                <CheckBox Content="Rating" IsChecked="{Binding Settings.ShowRating}" Width="200" />
+                <CheckBox Content="Platform" IsChecked="{Binding Settings.ShowPlatform}" Width="200" />
+                <CheckBox Content="Release date" IsChecked="{Binding Settings.ShowReleaseDate}" Width="200" />
+                <CheckBox Content="Store count" IsChecked="{Binding Settings.ShowStoreCount}" Width="200" />
+                <CheckBox Content="Favourite star" IsChecked="{Binding Settings.ShowFavouriteStar}" Width="200" />
+                <CheckBox Content="Collections" IsChecked="{Binding Settings.ShowCollections}" Width="200" />
+            </WrapPanel>
+            <TextBlock Style="{StaticResource Hint}" Text="Fields are only shown when data is available. Discounts, ratings, platforms and store counts are not part of the current GG.deals Prices API." />
+
+            <!-- ============================== Prices ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="Prices" />
+            <DockPanel>
+                <TextBlock Style="{StaticResource Label}" Text="Main price" />
+                <ComboBox ItemsSource="{Binding PricePreferenceOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Settings.PricePreference}" Width="240" HorizontalAlignment="Left" />
+            </DockPanel>
+            <CheckBox Content="Show a badge when a game is at its historical low" IsChecked="{Binding Settings.ShowHistoricalLowBadge}" Margin="0,8,0,0" />
+            <TextBlock Style="{StaticResource Hint}" Text="A game counts as a historical low when its current price is at or below the lowest price GG.deals has recorded for the same store type." />
+
+            <!-- ============================== Playnite ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="Playnite library" />
+            <CheckBox Content="Match wishlist games with my Playnite library" IsChecked="{Binding Settings.EnableMatching}" />
+            <StackPanel Margin="24,0,0,0" IsEnabled="{Binding Settings.EnableMatching}">
+                <CheckBox Content="Show whether I own a game" IsChecked="{Binding Settings.ShowOwnership}" />
+                <CheckBox Content="Show whether an owned game is installed" IsChecked="{Binding Settings.ShowInstalledStatus}" />
+                <CheckBox Content="Hide games I already own" IsChecked="{Binding Settings.HideOwned}" />
+                <CheckBox Content="Treat an exact title match as owned" IsChecked="{Binding Settings.TreatExactTitleAsOwned}" />
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="Steam app ids are matched first. Similar titles (for example editions or subtitles) are only suggested as possible matches and never counted as owned until you confirm them. Owned means anywhere in your library, installed or not. The extension never adds games to Playnite." />
+            </StackPanel>
+            <CheckBox Content="Search also looks at developers, publishers and store names" IsChecked="{Binding Settings.SearchIncludesExtra}" />
+
+            <!-- ============================== Collections ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="Collections" />
+            <TextBlock Style="{StaticResource Hint}" Text="Group wishlist games into your own local collections. They are stored by this extension and do not change GG.deals or Playnite." />
+            <Button Style="{StaticResource Action}" Content="Manage collections…" Command="{Binding ManageCollectionsCommand}" HorizontalAlignment="Left" />
+
+            <!-- ============================== Advanced ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="Advanced" />
+            <Button Style="{StaticResource Action}" Content="Clear cached data…" Command="{Binding ClearCacheCommand}" HorizontalAlignment="Left" />
+            <TextBlock Style="{StaticResource Hint}" Text="Removes cached wishlist and price data. Favourites, collections and ownership decisions are kept." />
+
+            <TextBlock Margin="0,24,0,0" FontSize="12" Foreground="{DynamicResource GG.TextMuted}" TextWrapping="Wrap">
+                <Run Text="Prices powered by" />
+                <Hyperlink Command="{Binding OpenAttributionCommand}" NavigateUri="https://gg.deals/">GG.deals</Hyperlink><Run Text=". This extension is not affiliated with GG.deals." />
+            </TextBlock>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

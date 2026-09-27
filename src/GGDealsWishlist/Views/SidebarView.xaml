@@ -1,0 +1,1007 @@
+<UserControl x:Class="GGDealsWishlist.Views.SidebarView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:GGDealsWishlist.Views"
+             xmlns:vm="clr-namespace:GGDealsWishlist.ViewModels"
+             xmlns:models="clr-namespace:GGDealsWishlist.Models"
+             x:Name="Root"
+             Foreground="{DynamicResource GG.Text}"
+             Background="{DynamicResource GG.Background}"
+             MinWidth="200"
+             UseLayoutRounding="True"
+             TextOptions.TextFormattingMode="Display">
+
+    <UserControl.Resources>
+        <v:BoolToVisibilityConverter x:Key="Vis" />
+        <v:BoolToVisibilityConverter x:Key="InvVis" Invert="True" />
+        <v:AllTrueToVisibilityConverter x:Key="AllVis" />
+        <v:EqualsConverter x:Key="Eq" />
+        <v:InSetToVisibilityConverter x:Key="InSet" />
+
+        <Style x:Key="GG.Muted" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <Style x:Key="GG.SectionLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,10,0,3" />
+        </Style>
+
+        <Style x:Key="GG.IconButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource GG.Text}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GG.StarButton" TargetType="Button" BasedOn="{StaticResource GG.IconButton}">
+            <Setter Property="Foreground" Value="{Binding Display.AccentBrush}" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinWidth" Value="24" />
+            <Setter Property="Padding" Value="2,0" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="ToolTip" Value="{Binding FavouriteTooltip}" />
+            <Setter Property="Content" Value="{Binding FavouriteGlyph}" />
+            <Setter Property="Command" Value="{Binding DataContext.ToggleFavouriteCommand, ElementName=Root}" />
+            <Setter Property="CommandParameter" Value="{Binding}" />
+            <Setter Property="Visibility" Value="{Binding Display.ShowFavouriteStar, Converter={StaticResource Vis}}" />
+        </Style>
+
+        <Style x:Key="GG.ActionButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{Binding DataContext.Display.AccentForegroundBrush, ElementName=Root}" />
+            <Setter Property="Background" Value="{Binding DataContext.Display.AccentBrush, ElementName=Root}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.85" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.85" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GG.SecondaryButton" TargetType="Button" BasedOn="{StaticResource GG.ActionButton}">
+            <Setter Property="Foreground" Value="{DynamicResource GG.Text}" />
+            <Setter Property="Background" Value="{DynamicResource GG.Card}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource GG.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+
+        <Style x:Key="GG.LinkButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{Binding DataContext.Display.AccentBrush, ElementName=Root}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock x:Name="Text" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Text" Property="TextDecorations" Value="Underline" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Text" Property="TextDecorations" Value="Underline" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GG.QuickTab" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="Transparent" BorderThickness="0,0,0,2" BorderBrush="Transparent" Padding="6,4">
+                            <ContentPresenter HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{Binding DataContext.Display.AccentBrush, ElementName=Root}" />
+                                <Setter Property="Foreground" Value="{DynamicResource GG.Text}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource GG.Card}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GG.Badge" TargetType="Border">
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="Padding" Value="4,1" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="GG.Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource GG.Card}" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="12" />
+        </Style>
+
+        <!-- ============================== Item templates ============================== -->
+
+        <DataTemplate x:Key="CoverCardTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <Border x:Name="Card" Background="{DynamicResource GG.Card}" CornerRadius="4" BorderThickness="1" BorderBrush="Transparent"
+                    Padding="{Binding Display.CardPadding}" Margin="{Binding Display.CardMargin}" ToolTip="{Binding Tooltip}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Width="{Binding Display.CoverWidth}" Height="{Binding Display.CoverHeight}" Margin="0,0,10,0" VerticalAlignment="Top"
+                          Visibility="{Binding Display.ShowCover, Converter={StaticResource Vis}}">
+                        <Border Background="{DynamicResource GG.Placeholder}" CornerRadius="3">
+                            <TextBlock Text="🎮" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource GG.TextMuted}" />
+                        </Border>
+                        <Image v:CoverImage.DecodeWidth="220" v:CoverImage.Source="{Binding CoverSource}" Stretch="UniformToFill" />
+                    </Grid>
+
+                    <StackPanel Grid.Column="1" MinWidth="0">
+                        <DockPanel LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GG.StarButton}" />
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{Binding Display.TitleFontSize}" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis" MaxHeight="40" Margin="0,2,4,0"
+                                       Visibility="{Binding Display.ShowTitle, Converter={StaticResource Vis}}" />
+                        </DockPanel>
+
+                        <WrapPanel Margin="0,4,0,0" Visibility="{Binding Display.ShowCurrentPrice, Converter={StaticResource Vis}}">
+                            <TextBlock x:Name="Price" Text="{Binding PriceText}" FontSize="{Binding Display.PriceFontSize}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <Border Style="{StaticResource GG.Badge}" Background="{Binding Display.AccentBrush}">
+                                <Border.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="HasDiscount" />
+                                        <Binding Path="Display.ShowDiscount" />
+                                    </MultiBinding>
+                                </Border.Visibility>
+                                <TextBlock Text="{Binding DiscountText}" FontWeight="Bold" FontSize="12" Foreground="{Binding Display.AccentForegroundBrush}" />
+                            </Border>
+                        </WrapPanel>
+
+                        <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding PriceSourceText}" Margin="0,1,0,0">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="Display.ShowPriceSource" />
+                                    <Binding Path="PriceSourceText" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+
+                        <Border Style="{StaticResource GG.Badge}" Background="{Binding Display.AccentSoftBrush}" HorizontalAlignment="Left" Margin="0,5,0,0">
+                            <Border.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="IsHistoricalLow" />
+                                    <Binding Path="Display.ShowHistoricalLowBadge" />
+                                </MultiBinding>
+                            </Border.Visibility>
+                            <TextBlock Text="🔥 HISTORICAL LOW" FontSize="10.5" FontWeight="Bold" Foreground="{Binding Display.AccentBrush}" />
+                        </Border>
+
+                        <WrapPanel Margin="0,5,0,0" Visibility="{Binding Display.ShowCardPriceBreakdown, Converter={StaticResource Vis}}">
+                            <TextBlock Style="{StaticResource GG.Muted}" Margin="0,0,10,0" Visibility="{Binding Display.ShowRetailPrice, Converter={StaticResource Vis}}">
+                                <Run Text="Retail" /> <Run Text="{Binding CurrentRetailText, Mode=OneWay}" Foreground="{DynamicResource GG.Text}" />
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource GG.Muted}" Margin="0,0,10,0" Visibility="{Binding Display.ShowKeyshopPrice, Converter={StaticResource Vis}}">
+                                <Run Text="Keyshop" /> <Run Text="{Binding CurrentKeyshopText, Mode=OneWay}" Foreground="{DynamicResource GG.Text}" />
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource GG.Muted}">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="Display.ShowHistoricalLow" />
+                                        <Binding Path="HasHistoricalLow" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                                <Run Text="Low" /> <Run Text="{Binding HistoricalLowText, Mode=OneWay}" Foreground="{DynamicResource GG.Text}" />
+                            </TextBlock>
+                        </WrapPanel>
+
+                        <WrapPanel Margin="0,5,0,0" Visibility="{Binding Display.ShowOwnership, Converter={StaticResource Vis}}">
+                            <TextBlock x:Name="Owned" Text="{Binding OwnershipText}" FontSize="11" Margin="0,0,10,0" Foreground="{DynamicResource GG.TextMuted}" />
+                            <TextBlock Text="{Binding InstalledText}" FontSize="11" Foreground="{DynamicResource GG.TextMuted}">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="IsOwned" />
+                                        <Binding Path="Display.ShowInstalledStatus" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
+                            <TextBlock Text="≈ Possibly owned" FontSize="11" Foreground="{DynamicResource GG.Warning}" ToolTip="{Binding PotentialMatchText}"
+                                       Visibility="{Binding IsPotentialMatch, Converter={StaticResource Vis}}" />
+                        </WrapPanel>
+
+                        <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding CollectionsText}" Margin="0,4,0,0">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="HasCollections" />
+                                    <Binding Path="Display.ShowCollections" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+
+                        <WrapPanel Margin="0,3,0,0" Visibility="{Binding Display.IsWide, Converter={StaticResource Vis}}">
+                            <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding AddedDateText}" Margin="0,0,10,0">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="Display.ShowWishlistDate" />
+                                        <Binding Path="AddedDateText" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding ReleaseDateText}" Margin="0,0,10,0">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="Display.ShowReleaseDate" />
+                                        <Binding Path="ReleaseDateText" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding PlatformText}" Margin="0,0,10,0">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="Display.ShowPlatform" />
+                                        <Binding Path="PlatformText" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding RatingText}" Margin="0,0,10,0">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="Display.ShowRating" />
+                                        <Binding Path="RatingText" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding StoreCountText}">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="Display.ShowStoreCount" />
+                                        <Binding Path="StoreCountText" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
+                        </WrapPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasPrice}" Value="False">
+                    <Setter TargetName="Price" Property="FontSize" Value="12.5" />
+                    <Setter TargetName="Price" Property="FontWeight" Value="Normal" />
+                    <Setter TargetName="Price" Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsStale}" Value="True">
+                    <Setter TargetName="Price" Property="Opacity" Value="0.7" />
+                    <Setter TargetName="Price" Property="ToolTip" Value="Price may be out of date" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsOwned}" Value="True">
+                    <Setter TargetName="Owned" Property="Foreground" Value="{DynamicResource GG.Success}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Card" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{Binding Display.AccentBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CompactTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <Border x:Name="Row" Background="Transparent" CornerRadius="3" BorderThickness="1" BorderBrush="Transparent" Padding="{Binding Display.RowPadding}" ToolTip="{Binding Tooltip}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Width="{Binding Display.CompactCoverWidth}" Height="{Binding Display.CompactCoverHeight}" Margin="0,0,8,0"
+                          Visibility="{Binding Display.ShowCover, Converter={StaticResource Vis}}">
+                        <Border Background="{DynamicResource GG.Placeholder}" CornerRadius="2">
+                            <TextBlock Text="🎮" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource GG.TextMuted}" />
+                        </Border>
+                        <Image v:CoverImage.DecodeWidth="64" v:CoverImage.Source="{Binding CoverSource}" Stretch="UniformToFill" />
+                    </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" MinWidth="0">
+                        <TextBlock Text="{Binding Title}" FontSize="{Binding Display.TitleFontSize}" TextTrimming="CharacterEllipsis"
+                                   Visibility="{Binding Display.ShowTitle, Converter={StaticResource Vis}}" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔥 Historical low" FontSize="10.5" Foreground="{Binding Display.AccentBrush}" Margin="0,0,8,0">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="IsHistoricalLow" />
+                                        <Binding Path="Display.ShowHistoricalLowBadge" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
+                            <TextBlock Text="✓ Owned" FontSize="10.5" Foreground="{DynamicResource GG.Success}">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource AllVis}">
+                                        <Binding Path="IsOwned" />
+                                        <Binding Path="Display.ShowOwnership" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <TextBlock Text="{Binding DiscountText}" FontSize="11.5" FontWeight="Bold" Foreground="{Binding Display.AccentBrush}" Margin="0,0,6,0" VerticalAlignment="Center">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="HasDiscount" />
+                                    <Binding Path="Display.ShowDiscount" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <TextBlock x:Name="Price" Text="{Binding PriceText}" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"
+                                   Visibility="{Binding Display.ShowCurrentPrice, Converter={StaticResource Vis}}" />
+                        <TextBlock Text="★" Foreground="{Binding Display.AccentBrush}" Margin="6,0,0,0" VerticalAlignment="Center">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="IsFavourite" />
+                                    <Binding Path="Display.ShowFavouriteStar" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasPrice}" Value="False">
+                    <Setter TargetName="Price" Property="FontWeight" Value="Normal" />
+                    <Setter TargetName="Price" Property="FontSize" Value="11" />
+                    <Setter TargetName="Price" Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Row" Property="BorderBrush" Value="{Binding Display.AccentBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ListTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <Border x:Name="Row" Background="Transparent" BorderThickness="1" BorderBrush="Transparent" CornerRadius="2" Padding="{Binding Display.RowPadding}" ToolTip="{Binding Tooltip}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Discount" />
+                    </Grid.ColumnDefinitions>
+                    <DockPanel LastChildFill="True" MinWidth="0">
+                        <TextBlock DockPanel.Dock="Left" Text="★" Foreground="{Binding Display.AccentBrush}" Margin="0,0,5,0">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="IsFavourite" />
+                                    <Binding Path="Display.ShowFavouriteStar" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <TextBlock DockPanel.Dock="Left" Text="🔥" Margin="0,0,5,0" ToolTip="At its historical low">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="IsHistoricalLow" />
+                                    <Binding Path="Display.ShowHistoricalLowBadge" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <TextBlock Text="{Binding Title}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                    <TextBlock Grid.Column="1" x:Name="Price" Text="{Binding PriceText}" FontSize="13" FontWeight="SemiBold" Margin="10,0,0,0" TextAlignment="Right"
+                               Visibility="{Binding Display.ShowCurrentPrice, Converter={StaticResource Vis}}" />
+                    <TextBlock Grid.Column="2" Text="{Binding DiscountText}" FontSize="12" FontWeight="Bold" Foreground="{Binding Display.AccentBrush}" Margin="8,0,0,0" MinWidth="34" TextAlignment="Right">
+                        <TextBlock.Visibility>
+                            <MultiBinding Converter="{StaticResource AllVis}">
+                                <Binding Path="HasDiscount" />
+                                <Binding Path="Display.ShowDiscount" />
+                            </MultiBinding>
+                        </TextBlock.Visibility>
+                    </TextBlock>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasPrice}" Value="False">
+                    <Setter TargetName="Price" Property="FontWeight" Value="Normal" />
+                    <Setter TargetName="Price" Property="FontSize" Value="11" />
+                    <Setter TargetName="Price" Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Row" Property="BorderBrush" Value="{Binding Display.AccentBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <Style x:Key="GG.ItemContainer" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnItemMouseUp" />
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="OnItemRightMouseDown" />
+            <EventSetter Event="KeyDown" Handler="OnItemKeyDown" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ============================== Header ============================== -->
+        <StackPanel Grid.Row="0" Margin="10,8,6,2">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Style="{StaticResource GG.IconButton}" Content="↻" Command="{Binding RefreshCommand}" ToolTip="Refresh wishlist and prices" AutomationProperties.Name="Refresh" />
+                    <Button Style="{StaticResource GG.IconButton}" Content="{Binding ViewModeGlyph}" Command="{Binding CycleViewModeCommand}" ToolTip="{Binding ViewModeTooltip}" AutomationProperties.Name="Change view mode" />
+                    <Button Style="{StaticResource GG.IconButton}" Content="⚙" Command="{Binding OpenSettingsCommand}" ToolTip="Extension settings" AutomationProperties.Name="Settings" />
+                </StackPanel>
+                <TextBlock Text="GG.DEALS WISHLIST" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+
+            <WrapPanel Margin="0,2,0,0">
+                <WrapPanel.Visibility>
+                    <MultiBinding Converter="{StaticResource AllVis}">
+                        <Binding Path="ShowSummary" />
+                        <Binding Path="IsContentVisible" />
+                    </MultiBinding>
+                </WrapPanel.Visibility>
+                <TextBlock Text="{Binding GameCountText}" FontSize="12" Margin="0,0,10,0" Visibility="{Binding ShowGameCount, Converter={StaticResource Vis}}" />
+                <TextBlock Text="{Binding OnSaleText}" FontSize="12" Margin="0,0,10,0" Visibility="{Binding ShowOnSaleCount, Converter={StaticResource Vis}}" />
+                <TextBlock FontSize="12" Visibility="{Binding ShowHistoricalLowCount, Converter={StaticResource Vis}}">
+                    <Run Text="🔥" Foreground="{Binding Display.AccentBrush, Mode=OneWay}" /><Run Text="{Binding HistoricalLowCountText, Mode=OneWay}" />
+                </TextBlock>
+            </WrapPanel>
+
+            <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding StatusText}" ToolTip="{Binding StatusTooltip}" Margin="0,2,0,0"
+                       Visibility="{Binding ShowLastUpdated, Converter={StaticResource Vis}}" />
+            <ProgressBar Height="2" Margin="0,4,0,0" Minimum="0" Maximum="1" Value="{Binding ProgressValue, Mode=OneWay}" BorderThickness="0"
+                         Background="{DynamicResource GG.Card}" Foreground="{Binding Display.AccentBrush}"
+                         Visibility="{Binding HasProgress, Converter={StaticResource Vis}}" />
+        </StackPanel>
+
+        <!-- ============================== Toolbar ============================== -->
+        <StackPanel Grid.Row="1" Margin="10,6,10,0" Visibility="{Binding ShowToolbar, Converter={StaticResource Vis}}">
+            <Grid>
+                <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="6,4,24,4" VerticalContentAlignment="Center"
+                         AutomationProperties.Name="Search wishlist" />
+                <TextBlock Text="🔍 Search wishlist..." IsHitTestVisible="False" Margin="9,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource GG.TextMuted}" FontSize="12"
+                           Visibility="{Binding HasSearchText, Converter={StaticResource InvVis}}" />
+                <Button Style="{StaticResource GG.IconButton}" Content="✕" FontSize="11" Height="22" MinWidth="22" HorizontalAlignment="Right" Margin="0,0,2,0"
+                        Command="{Binding ClearSearchCommand}" ToolTip="Clear search" Visibility="{Binding HasSearchText, Converter={StaticResource Vis}}" />
+            </Grid>
+
+            <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ComboBox ItemsSource="{Binding SortOptions}" SelectedValuePath="Value" SelectedValue="{Binding Sort}" MinWidth="0" ToolTip="Sort"
+                          AutomationProperties.Name="Sort">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                </ComboBox>
+                <ToggleButton x:Name="FilterToggle" Grid.Column="1" Margin="6,0,0,0" Padding="10,3" Content="{Binding FilterButtonText}"
+                              IsChecked="{Binding IsFilterPanelOpen, Mode=TwoWay}" ToolTip="Filters" AutomationProperties.Name="Filters" />
+                <Popup Grid.Column="1" PlacementTarget="{Binding ElementName=FilterToggle}" Placement="Bottom" StaysOpen="False"
+                       IsOpen="{Binding IsFilterPanelOpen, Mode=TwoWay}" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Background="{DynamicResource GG.Popup}" BorderBrush="{DynamicResource GG.Border}" BorderThickness="1" CornerRadius="4" Padding="12" Width="260"
+                            TextElement.Foreground="{DynamicResource GG.Text}">
+                        <ScrollViewer MaxHeight="520" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource GG.SectionLabel}" Text="PRICE" Margin="0,0,0,3" />
+                                <ComboBox ItemsSource="{Binding PriceOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding PriceFilter}" />
+                                <DockPanel Margin="0,4,0,0" Visibility="{Binding IsCustomPrice, Converter={StaticResource Vis}}">
+                                    <TextBlock Text="Max" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                    <TextBox Text="{Binding CustomMaxPriceText, UpdateSourceTrigger=PropertyChanged, Delay=300}" AutomationProperties.Name="Maximum price" />
+                                </DockPanel>
+
+                                <TextBlock Style="{StaticResource GG.SectionLabel}" Text="DISCOUNT" />
+                                <ComboBox ItemsSource="{Binding DiscountOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding MinDiscount}" />
+
+                                <TextBlock Style="{StaticResource GG.SectionLabel}" Text="STORE" />
+                                <ComboBox ItemsSource="{Binding StoreOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding StoreFilter}" />
+
+                                <TextBlock Style="{StaticResource GG.SectionLabel}" Text="SALE STATUS" />
+                                <ComboBox ItemsSource="{Binding SaleStatusOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SaleStatus}" />
+
+                                <CheckBox Content="Historical low only" IsChecked="{Binding HistoricalLowOnly}" Margin="0,8,0,0" />
+
+                                <TextBlock Style="{StaticResource GG.SectionLabel}" Text="PLAYNITE" />
+                                <ComboBox ItemsSource="{Binding OwnershipOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Ownership}" />
+                                <CheckBox Content="Hide games already owned" IsChecked="{Binding HideOwned}" Margin="0,6,0,0"
+                                          ToolTip="Owned means the game exists anywhere in your Playnite library, installed or not." />
+
+                                <TextBlock Style="{StaticResource GG.SectionLabel}" Text="FAVOURITES" />
+                                <ComboBox ItemsSource="{Binding FavouriteOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Favourites}" />
+
+                                <TextBlock Style="{StaticResource GG.SectionLabel}" Text="COLLECTIONS" />
+                                <ItemsControl ItemsSource="{Binding CollectionFilters}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsSelected}" Margin="0,2">
+                                                <TextBlock>
+                                                    <Run Text="{Binding Label, Mode=OneWay}" />
+                                                    <Run Text="{Binding Count, Mode=OneWay, StringFormat=({0})}" Foreground="{DynamicResource GG.TextMuted}" />
+                                                </TextBlock>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Style="{StaticResource GG.Muted}" Text="No collections yet." Visibility="{Binding HasCollections, Converter={StaticResource InvVis}}" />
+                                <Button Style="{StaticResource GG.LinkButton}" Content="Manage collections…" Command="{Binding ManageCollectionsCommand}" Margin="0,6,0,0" HorizontalAlignment="Left" />
+
+                                <Button Style="{StaticResource GG.SecondaryButton}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Popup>
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                <RadioButton Style="{StaticResource GG.QuickTab}" GroupName="Quick" Content="ALL"
+                             IsChecked="{Binding Quick, Converter={StaticResource Eq}, ConverterParameter=All, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource GG.QuickTab}" GroupName="Quick" Content="ON SALE" ToolTip="{Binding OnSaleTabTooltip}" ToolTipService.ShowOnDisabled="True"
+                             IsEnabled="{Binding IsOnSaleAvailable}"
+                             IsChecked="{Binding Quick, Converter={StaticResource Eq}, ConverterParameter=OnSale, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource GG.QuickTab}" GroupName="Quick" Content="HISTORICAL LOW"
+                             IsChecked="{Binding Quick, Converter={StaticResource Eq}, ConverterParameter=HistoricalLow, Mode=TwoWay}" />
+            </StackPanel>
+
+            <DockPanel Margin="2,4,0,0" Visibility="{Binding HasActiveFilters, Converter={StaticResource Vis}}">
+                <Button DockPanel.Dock="Right" Style="{StaticResource GG.LinkButton}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" />
+                <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding FilteredCountText}" />
+            </DockPanel>
+        </StackPanel>
+
+        <!-- ============================== Non-blocking warning ============================== -->
+        <Border Grid.Row="2" Margin="10,8,10,0" Padding="10" CornerRadius="4" Background="{DynamicResource GG.WarningBackground}"
+                BorderBrush="{DynamicResource GG.Warning}" BorderThickness="2,0,0,0"
+                Visibility="{Binding HasWarning, Converter={StaticResource Vis}}">
+            <StackPanel>
+                <TextBlock Text="{Binding WarningTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding WarningMessage}" TextWrapping="Wrap" FontSize="12" Margin="0,2,0,0" />
+                <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding LastSuccessText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                           Visibility="{Binding LastSuccessText, Converter={StaticResource Vis}}" />
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button Style="{StaticResource GG.LinkButton}" Content="RETRY" Command="{Binding RetryCommand}" Margin="0,0,14,0"
+                            Visibility="{Binding CanRetry, Converter={StaticResource Vis}}" />
+                    <Button Style="{StaticResource GG.LinkButton}" Content="API SETTINGS" Command="{Binding OpenSettingsCommand}"
+                            Visibility="{Binding ShowSettingsInWarning, Converter={StaticResource Vis}}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- ============================== Main content ============================== -->
+        <Grid Grid.Row="3" Margin="0,8,0,0">
+            <ListBox x:Name="WishlistList"
+                     ItemsSource="{Binding Items}"
+                     ItemContainerStyle="{StaticResource GG.ItemContainer}"
+                     SelectionMode="Extended"
+                     Background="Transparent"
+                     Foreground="{DynamicResource GG.Text}"
+                     BorderThickness="0"
+                     Padding="10,0,6,0"
+                     HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.CanContentScroll="True"
+                     ScrollViewer.PanningMode="VerticalOnly"
+                     VirtualizingPanel.IsVirtualizing="True"
+                     VirtualizingPanel.VirtualizationMode="Recycling"
+                     VirtualizingPanel.ScrollUnit="Pixel"
+                     VirtualizingPanel.CacheLength="1,2"
+                     VirtualizingPanel.CacheLengthUnit="Page"
+                     Grid.IsSharedSizeScope="True"
+                     AutomationProperties.Name="Wishlist"
+                     ContextMenuOpening="OnListContextMenuOpening"
+                     Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=Content}">
+                <ListBox.ContextMenu>
+                    <ContextMenu />
+                </ListBox.ContextMenu>
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.Style>
+                    <Style TargetType="ListBox">
+                        <Setter Property="ItemTemplate" Value="{StaticResource CoverCardTemplate}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding EffectiveViewMode}" Value="{x:Static models:ViewMode.Compact}">
+                                <Setter Property="ItemTemplate" Value="{StaticResource CompactTemplate}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding EffectiveViewMode}" Value="{x:Static models:ViewMode.List}">
+                                <Setter Property="ItemTemplate" Value="{StaticResource ListTemplate}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListBox.Style>
+            </ListBox>
+
+            <!-- Loading -->
+            <TextBlock Text="Loading wishlist…" Style="{StaticResource GG.Muted}" HorizontalAlignment="Center" Margin="0,30,0,0"
+                       Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=Loading}" />
+
+            <!-- No results -->
+            <StackPanel Margin="16,24,16,0" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=NoResults}">
+                <TextBlock Text="No games match your search and filters." TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
+                <Button Style="{StaticResource GG.SecondaryButton}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" HorizontalAlignment="Center" Margin="0,10,0,0" />
+            </StackPanel>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter='NeedsApiKey,WishlistUnavailable,EmptyWishlist,Error'}">
+                <StackPanel Margin="10,4,10,10">
+
+                    <!-- First run -->
+                    <Border Style="{StaticResource GG.Card}" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=NeedsApiKey}">
+                        <StackPanel>
+                            <TextBlock Text="GG.DEALS" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource GG.TextMuted}" />
+                            <TextBlock Text="Connect your GG.deals API account" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" Margin="0,4,0,10" />
+                            <TextBlock Text="API Key" FontSize="12" Margin="0,0,0,3" />
+                            <PasswordBox x:Name="SetupKeyBox" PasswordChanged="OnSetupKeyChanged" Padding="4" AutomationProperties.Name="API key" />
+                            <Button Style="{StaticResource GG.ActionButton}" Content="TEST CONNECTION" Command="{Binding TestSetupKeyCommand}" Margin="0,8,0,0" />
+                            <TextBlock x:Name="SetupStatus" Text="{Binding SetupStatus}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,2,0,6"
+                                       Visibility="{Binding SetupStatus, Converter={StaticResource Vis}}" />
+                            <TextBlock Style="{StaticResource GG.Muted}" TextWrapping="Wrap" TextTrimming="None"
+                                       Text="Your API key is stored securely (encrypted for your Windows account) and is required to retrieve price data. It is never shown or logged." />
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Style="{StaticResource GG.LinkButton}" Content="Learn more" Command="{Binding OpenApiInfoCommand}" Margin="0,0,14,0" />
+                                <Button Style="{StaticResource GG.LinkButton}" Content="Settings" Command="{Binding OpenSettingsCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Wishlist API unavailable -->
+                    <Border Style="{StaticResource GG.Card}" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=WishlistUnavailable}">
+                        <StackPanel>
+                            <TextBlock Text="✓ GG.deals API key saved" Foreground="{DynamicResource GG.Success}" FontWeight="SemiBold" Margin="0,0,0,8"
+                                       Visibility="{Binding HasApiKey, Converter={StaticResource Vis}}" />
+                            <TextBlock TextWrapping="Wrap" Text="{Binding UnavailableMessage}" FontWeight="SemiBold" Margin="0,0,0,12" />
+                            <TextBlock TextWrapping="Wrap" Margin="0,-6,0,12" Foreground="{DynamicResource GG.TextMuted}"
+                                       Visibility="{Binding IsSteamSource, Converter={StaticResource InvVis}}"
+                                       Text="Meanwhile you can show GG.deals prices for your public Steam wishlist, or for a manual list of games. Choose one in the extension settings (Wishlist source)." />
+                            <Button Style="{StaticResource GG.ActionButton}" Content="OPEN GG.DEALS" Command="{Binding OpenWishlistCommand}" />
+                            <Button Style="{StaticResource GG.SecondaryButton}" Content="WISHLIST SETTINGS" Command="{Binding OpenSettingsCommand}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Empty wishlist -->
+                    <Border Style="{StaticResource GG.Card}" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=EmptyWishlist}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding EmptyMessage}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,0,12" />
+                            <Button Style="{StaticResource GG.ActionButton}" Content="OPEN GG.DEALS" Command="{Binding OpenWishlistCommand}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Unable to refresh, nothing cached -->
+                    <Border Style="{StaticResource GG.Card}" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=Error}">
+                        <StackPanel>
+                            <TextBlock Text="GG.DEALS" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource GG.TextMuted}" />
+                            <TextBlock Text="{Binding WarningTitle}" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" Margin="0,6,0,4" />
+                            <TextBlock Text="{Binding WarningMessage}" TextWrapping="Wrap" />
+                            <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding LastSuccessText}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       Visibility="{Binding LastSuccessText, Converter={StaticResource Vis}}" />
+                            <Button Style="{StaticResource GG.ActionButton}" Content="RETRY" Command="{Binding RetryCommand}" Margin="0,12,0,6"
+                                    Visibility="{Binding CanRetry, Converter={StaticResource Vis}}" />
+                            <Button Style="{StaticResource GG.SecondaryButton}" Content="API SETTINGS" Command="{Binding OpenSettingsCommand}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- ============================== Footer / attribution ============================== -->
+        <DockPanel Grid.Row="4" Margin="10,6,10,8">
+            <Button Content="Open GG.deals Wishlist ↗" Command="{Binding OpenWishlistCommand}">
+                <Button.Style>
+                    <!-- Narrow sidebars: the link moves to its own line so the attribution is never truncated. -->
+                    <Style TargetType="Button" BasedOn="{StaticResource GG.LinkButton}">
+                        <Setter Property="DockPanel.Dock" Value="Right" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Display.IsNarrow}" Value="True">
+                                <Setter Property="DockPanel.Dock" Value="Bottom" />
+                                <Setter Property="HorizontalAlignment" Value="Left" />
+                                <Setter Property="Margin" Value="0,3,0,0" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+            <TextBlock FontSize="11" Foreground="{DynamicResource GG.TextMuted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                <Run Text="Prices powered by" />
+                <Hyperlink Command="{Binding OpenAttributionCommand}" Foreground="{Binding Display.AccentBrush}" NavigateUri="https://gg.deals/">GG.deals</Hyperlink>
+            </TextBlock>
+        </DockPanel>
+
+        <!-- ============================== Game details ============================== -->
+        <Grid Grid.Row="0" Grid.RowSpan="5" Background="{DynamicResource GG.Popup}" DataContext="{Binding SelectedDetail}"
+              Visibility="{Binding DataContext.IsDetailOpen, ElementName=Root, Converter={StaticResource Vis}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <DockPanel Margin="6,6,6,0">
+                <Button DockPanel.Dock="Right" Style="{StaticResource GG.StarButton}" FontSize="18" Height="28" />
+                <Button Style="{StaticResource GG.IconButton}" Content="← Back" FontSize="13" Padding="8,2" HorizontalAlignment="Left"
+                        Command="{Binding DataContext.CloseDetailsCommand, ElementName=Root}" AutomationProperties.Name="Back to wishlist" />
+            </DockPanel>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="14,6,14,10">
+                    <Grid Width="{Binding Display.DetailCoverWidth}" Height="{Binding Display.DetailCoverHeight}" HorizontalAlignment="Center"
+                          Visibility="{Binding Display.ShowCover, Converter={StaticResource Vis}}">
+                        <Border Background="{DynamicResource GG.Placeholder}" CornerRadius="4">
+                            <TextBlock Text="🎮" FontSize="40" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource GG.TextMuted}" />
+                        </Border>
+                        <Image v:CoverImage.DecodeWidth="440" v:CoverImage.Source="{Binding CoverSource}" Stretch="UniformToFill" />
+                    </Grid>
+
+                    <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="Bold" TextWrapping="Wrap" Margin="0,12,0,4" />
+                    <WrapPanel Visibility="{Binding Display.ShowOwnership, Converter={StaticResource Vis}}">
+                        <TextBlock Text="{Binding OwnershipText}" FontSize="12" Margin="0,0,10,0" />
+                        <TextBlock Text="{Binding InstalledText}" FontSize="12" Foreground="{DynamicResource GG.TextMuted}">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="IsOwned" />
+                                    <Binding Path="Display.ShowInstalledStatus" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                    </WrapPanel>
+                    <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding MatchDescription}" Visibility="{Binding Display.ShowOwnership, Converter={StaticResource Vis}}" />
+
+                    <!-- Potential match confirmation -->
+                    <Border Style="{StaticResource GG.Card}" Padding="10" Margin="0,8,0,0" Visibility="{Binding IsPotentialMatch, Converter={StaticResource Vis}}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding PotentialMatchText}" TextWrapping="Wrap" FontSize="12" />
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Style="{StaticResource GG.LinkButton}" Content="Yes, I own this" Margin="0,0,14,0"
+                                        CommandParameter="{Binding}" Command="{Binding DataContext.ConfirmMatchCommand, ElementName=Root}" />
+                                <Button Style="{StaticResource GG.LinkButton}" Content="No, different game"
+                                        CommandParameter="{Binding}" Command="{Binding DataContext.RejectMatchCommand, ElementName=Root}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Button Style="{StaticResource GG.LinkButton}" Content="Reset ownership decision" HorizontalAlignment="Left" Margin="0,4,0,0"
+                            CommandParameter="{Binding}" Command="{Binding DataContext.ResetMatchCommand, ElementName=Root}"
+                            Visibility="{Binding HasMatchOverride, Converter={StaticResource Vis}}" />
+
+                    <!-- Prices -->
+                    <TextBlock Style="{StaticResource GG.SectionLabel}" Text="CURRENT LOWEST" Margin="0,14,0,2" Visibility="{Binding Display.ShowCurrentPrice, Converter={StaticResource Vis}}" />
+                    <WrapPanel Visibility="{Binding Display.ShowCurrentPrice, Converter={StaticResource Vis}}">
+                        <TextBlock Text="{Binding PriceText}" FontSize="22" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <Border Style="{StaticResource GG.Badge}" Background="{Binding Display.AccentBrush}">
+                            <Border.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="HasDiscount" />
+                                    <Binding Path="Display.ShowDiscount" />
+                                </MultiBinding>
+                            </Border.Visibility>
+                            <TextBlock Text="{Binding DiscountText}" FontWeight="Bold" Foreground="{Binding Display.AccentForegroundBrush}" />
+                        </Border>
+                    </WrapPanel>
+                    <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding PriceSourceText}" Visibility="{Binding PriceSourceText, Converter={StaticResource Vis}}" />
+                    <Border Style="{StaticResource GG.Badge}" Background="{Binding Display.AccentSoftBrush}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                            Visibility="{Binding IsHistoricalLow, Converter={StaticResource Vis}}">
+                        <TextBlock Text="🔥 HISTORICAL LOW" FontWeight="Bold" FontSize="11" Foreground="{Binding Display.AccentBrush}" />
+                    </Border>
+
+                    <StackPanel Visibility="{Binding RegularPriceText, Converter={StaticResource Vis}}">
+                        <TextBlock Style="{StaticResource GG.SectionLabel}" Text="REGULAR PRICE" />
+                        <TextBlock Text="{Binding RegularPriceText}" FontSize="14" />
+                    </StackPanel>
+
+                    <StackPanel>
+                        <StackPanel.Visibility>
+                            <MultiBinding Converter="{StaticResource AllVis}">
+                                <Binding Path="Display.ShowHistoricalLow" />
+                                <Binding Path="HasHistoricalLow" />
+                            </MultiBinding>
+                        </StackPanel.Visibility>
+                        <TextBlock Style="{StaticResource GG.SectionLabel}" Text="HISTORICAL LOW" />
+                        <TextBlock Text="{Binding HistoricalLowText}" FontSize="15" FontWeight="SemiBold" />
+                    </StackPanel>
+
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Visibility="{Binding Display.ShowRetailPrice, Converter={StaticResource Vis}}">
+                            <TextBlock Style="{StaticResource GG.SectionLabel}" Text="CURRENT RETAIL" />
+                            <TextBlock Text="{Binding CurrentRetailText}" FontSize="14" />
+                            <TextBlock Style="{StaticResource GG.Muted}" Margin="0,2,0,0">
+                                <Run Text="Low" /> <Run Text="{Binding HistoricalRetailText, Mode=OneWay}" />
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Visibility="{Binding Display.ShowKeyshopPrice, Converter={StaticResource Vis}}">
+                            <TextBlock Style="{StaticResource GG.SectionLabel}" Text="CURRENT KEYSHOP" />
+                            <TextBlock Text="{Binding CurrentKeyshopText}" FontSize="14" />
+                            <TextBlock Style="{StaticResource GG.Muted}" Margin="0,2,0,0">
+                                <Run Text="Low" /> <Run Text="{Binding HistoricalKeyshopText, Mode=OneWay}" />
+                            </TextBlock>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Store offers (only when the provider supplies them) -->
+                    <StackPanel Visibility="{Binding HasOffers, Converter={StaticResource Vis}}">
+                        <TextBlock Style="{StaticResource GG.SectionLabel}" Text="STORE OFFERS" Margin="0,14,0,2" />
+                        <TextBlock Text="Retail" FontWeight="SemiBold" FontSize="12" Visibility="{Binding HasRetailOffers, Converter={StaticResource Vis}}" />
+                        <ItemsControl ItemsSource="{Binding RetailOffers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,1">
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Price, StringFormat={}{0:0.00}}" />
+                                        <TextBlock Text="{Binding StoreName}" TextTrimming="CharacterEllipsis" />
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="Keyshops" FontWeight="SemiBold" FontSize="12" Margin="0,6,0,0" Visibility="{Binding HasKeyshopOffers, Converter={StaticResource Vis}}" />
+                        <ItemsControl ItemsSource="{Binding KeyshopOffers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,1">
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Price, StringFormat={}{0:0.00}}" />
+                                        <TextBlock Text="{Binding StoreName}" TextTrimming="CharacterEllipsis" />
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding PriceUpdatedText}" Margin="0,10,0,0" />
+
+                    <!-- Metadata -->
+                    <StackPanel Margin="0,6,0,0">
+                        <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding AddedDateText}">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="Display.ShowWishlistDate" />
+                                    <Binding Path="AddedDateText" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding ReleaseDateText}">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="Display.ShowReleaseDate" />
+                                    <Binding Path="ReleaseDateText" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding PlatformText}">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="Display.ShowPlatform" />
+                                    <Binding Path="PlatformText" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding RatingText}">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="Display.ShowRating" />
+                                    <Binding Path="RatingText" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding StoreCountText}">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="Display.ShowStoreCount" />
+                                    <Binding Path="StoreCountText" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <!-- Collections -->
+                    <TextBlock Style="{StaticResource GG.SectionLabel}" Text="COLLECTIONS" Margin="0,12,0,2" Visibility="{Binding Display.ShowCollections, Converter={StaticResource Vis}}" />
+                    <TextBlock Text="{Binding CollectionsText}" TextWrapping="Wrap" FontSize="12" Visibility="{Binding HasCollections, Converter={StaticResource Vis}}" />
+                    <Button Style="{StaticResource GG.LinkButton}" Content="Add to collection…" HorizontalAlignment="Left" Margin="0,4,0,0" Click="OnDetailCollectionsClick"
+                            Visibility="{Binding Display.ShowCollections, Converter={StaticResource Vis}}" />
+
+                    <!-- Actions -->
+                    <StackPanel Margin="0,16,0,0">
+                        <Button Style="{StaticResource GG.ActionButton}" Content="OPEN GG.DEALS" CommandParameter="{Binding}" Command="{Binding DataContext.OpenGGDealsCommand, ElementName=Root}" />
+                        <Button Style="{StaticResource GG.SecondaryButton}" Content="OPEN STORE" CommandParameter="{Binding}" Command="{Binding DataContext.OpenStoreCommand, ElementName=Root}"
+                                ToolTip="Opens the cheapest store when GG.deals provides a direct store link" ToolTipService.ShowOnDisabled="True" />
+                        <Button Style="{StaticResource GG.SecondaryButton}" Content="OPEN STEAM PAGE" CommandParameter="{Binding}" Command="{Binding DataContext.OpenSteamCommand, ElementName=Root}"
+                                Visibility="{Binding HasSteamStoreUrl, Converter={StaticResource Vis}}" />
+                        <Button Style="{StaticResource GG.SecondaryButton}" Content="OPEN PLAYNITE" CommandParameter="{Binding}" Command="{Binding DataContext.OpenInPlayniteCommand, ElementName=Root}"
+                                Visibility="{Binding CanOpenInPlaynite, Converter={StaticResource Vis}}" />
+                        <Button Style="{StaticResource GG.LinkButton}" Content="Copy GG.deals link" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                CommandParameter="{Binding}" Command="{Binding DataContext.CopyLinkCommand, ElementName=Root}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+            <TextBlock Grid.Row="2" FontSize="11" Foreground="{DynamicResource GG.TextMuted}" Margin="14,4,14,8">
+                <Run Text="Prices powered by" />
+                <Hyperlink CommandParameter="{Binding}" Command="{Binding DataContext.OpenAttributionCommand, ElementName=Root}"
+                           Foreground="{Binding Display.AccentBrush}" NavigateUri="https://gg.deals/">GG.deals</Hyperlink>
+            </TextBlock>
+        </Grid>
+    </Grid>
+</UserControl>
