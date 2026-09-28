@@ -88,7 +88,7 @@ namespace GGDealsWishlist.Views
                 return;
             }
 
-            viewModel.OpenDetails(item);
+            viewModel.ActivateItem(item);
         }
 
         private void OnItemRightMouseDown(object sender, MouseButtonEventArgs e)
@@ -104,16 +104,19 @@ namespace GGDealsWishlist.Views
         {
             if (e.Key == Key.Enter && sender is ListBoxItem container && container.DataContext is WishlistItemViewModel item)
             {
-                viewModel.OpenDetails(item);
+                viewModel.ActivateItem(item);
                 e.Handled = true;
             }
         }
+
+        /// <summary>Set as the Tag of the expanded-details panel so clicking its chart or table does not collapse the card.</summary>
+        private const string ExpandedPanelTag = "gg-expanded-panel";
 
         private static bool IsInsideButton(DependencyObject source, DependencyObject stopAt)
         {
             while (source != null && !ReferenceEquals(source, stopAt))
             {
-                if (source is ButtonBase)
+                if (source is ButtonBase || (source is FrameworkElement element && ExpandedPanelTag.Equals(element.Tag)))
                 {
                     return true;
                 }

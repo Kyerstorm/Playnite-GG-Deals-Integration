@@ -4,12 +4,20 @@ A Playnite extension that shows your wishlist with live GG.deals prices in a nat
 
 ## What you get
 
-- A native WPF sidebar. It is not an embedded browser. It has three views:
+- A native WPF sidebar. It is not an embedded browser. It has four views:
   - **Cover + information** (the default)
   - **Compact**
   - **List**
+  - **Grid**, with landscape cover tiles: two per row, three in a wide sidebar, one in a narrow one
 
-  Below 230 px wide, the cover cards switch automatically to compact rows.
+  Below 230 px wide, the cover cards and the grid switch automatically to compact rows. In a wide sidebar (900 px and up) the cover cards flow into two or more columns, and the grid adds a column for roughly every 200 px. An expanded card always takes a full row.
+- Click a card or tile (or press Enter) to open it in place. The expanded card shows the price history and the current and lowest-ever prices for official stores and keyshops, with buttons for GG.deals and the full details page. Only one card is open at a time. In the compact views a click opens the full details page instead.
+- Price history recorded by the extension itself. The GG.deals Prices API has no history endpoint, so each refresh saves the prices it sees, and a point is added only when a price changes:
+  - The history starts empty and only covers the time the extension has been running.
+  - It is stored locally in `price-history.json`, capped at 200 changes per game, and dropped when a game leaves the wishlist.
+  - A change of region or currency starts a new line, so currencies are never mixed.
+  - *Settings → Advanced → Clear price history* deletes it. *Clear cached data* keeps it.
+  - A small trend line appears on cover cards, and a chart in the expanded card and the details page. It can be hidden under *Information shown → Price history*.
 - A header summary showing the number of games, games on sale and historical lows, plus the last update time.
 - Local search, sorting and filters. None of these make network calls:
   - **Sorting:** 10 sort orders.
@@ -39,7 +47,8 @@ A Playnite extension that shows your wishlist with live GG.deals prices in a nat
 | **Steam wishlist** | Choose **My Steam wishlist** and enter your SteamID64 or a `steamcommunity.com/profiles/…` link. The game list is read with Steam's official Web API (`IWishlistService/GetWishlist`), in your Steam wishlist order and with the dates you added each game. Game names come from Steam's store API (`IStoreBrowseService/GetItems`), so every game is named even before its prices load or when GG.deals doesn't list it. Steam's own prices in that response are ignored. No Steam login is used, so your wishlist must be public (Steam → Edit Profile → Privacy Settings → Game details: Public). Custom `/id/name` links aren't supported, because resolving them requires a Steam Web API key. Only Steam games are included. |
 | **Manual list** | Choose **Manual list** and enter Steam app IDs or store links, one per line. |
 | **Discounts, store names, ratings, platforms** | The Prices API returns current and historical retail and keyshop prices only. These fields, and the ON SALE tab, stay hidden or disabled until a provider supplies the data. They are never fabricated. |
-| **Out of scope** | Price-drop notifications, purchasing, price history charts, deal scores, recommendations, platform and genre filters, and changing the wishlist on GG.deals. |
+| **Price history** | GG.deals offers no price-history data through its API. The extension only charts the prices it saw itself, from the day it started tracking each game. It never shows an estimated or back-filled history. |
+| **Out of scope** | Price-drop notifications, purchasing, deal scores, recommendations, platform and genre filters, and changing the wishlist on GG.deals. |
 
 When GG.deals adds a wishlist endpoint, the only change needed is a new `IGGDealsWishlistProvider` implementation registered first in `GGDealsWishlistPlugin`. The UI, cache and price layers stay as they are.
 

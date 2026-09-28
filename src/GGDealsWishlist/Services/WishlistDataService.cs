@@ -114,11 +114,14 @@ namespace GGDealsWishlist.Services
         private readonly RateLimitTracker rateLimits;
         private readonly VersionedJsonStore<CacheDocument> cacheStore;
         private readonly VersionedJsonStore<LocalStateDocument> stateStore;
+        private readonly VersionedJsonStore<PriceHistoryDocument> historyStore;
         private readonly ILibrarySource library;
         private readonly Func<ServiceOptions> options;
         private readonly IClock clock;
 
         private CacheDocument cache = new CacheDocument();
+        private PriceHistoryDocument history = new PriceHistoryDocument();
+        private bool historyDirty;
         private LocalStateDocument state = new LocalStateDocument();
         private PlayniteMatcher matcher = new PlayniteMatcher(null);
         private Dictionary<string, MatchResult> matchCache = new Dictionary<string, MatchResult>();
@@ -137,13 +140,15 @@ namespace GGDealsWishlist.Services
             VersionedJsonStore<LocalStateDocument> stateStore,
             ILibrarySource library,
             Func<ServiceOptions> options,
-            IClock clock = null)
+            IClock clock = null,
+            VersionedJsonStore<PriceHistoryDocument> historyStore = null)
         {
             this.registry = registry;
             this.priceProvider = priceProvider;
             this.rateLimits = rateLimits;
             this.cacheStore = cacheStore;
             this.stateStore = stateStore;
+            this.historyStore = historyStore;
             this.library = library;
             this.options = options;
             this.clock = clock ?? SystemClock.Instance;
@@ -201,6 +206,8 @@ namespace GGDealsWishlist.Services
                     var loadedCache = cacheStore.Load();
                     var loadedState = stateStore.Load();
                     loadedState.Normalize();
+                    var loadedHistory = historyStore?.Load() ?? new PriceHistoryDocument();
+                    loadedHistory.Normalize();
                     loadedCache.WishlistEntries = loadedCache.WishlistEntries ?? new List<WishlistEntry>();
                     loadedCache.Prices = loadedCache.Prices ?? new Dictionary<string, PriceData>();
                     rateLimits.Import(loadedCache.RateLimit);
@@ -209,6 +216,7 @@ namespace GGDealsWishlist.Services
                     {
                         cache = loadedCache;
                         state = loadedState;
+                        history = loadedHistory;
                         status.LastError = loadedCache.LastError;
                         status.RetryAfterUtc = loadedCache.LastError?.RetryAfterUtc;
                         if (status.RetryAfterUtc > clock.UtcNow)
@@ -340,6 +348,7 @@ namespace GGDealsWishlist.Services
 
                 ScheduleNextAutomaticRefresh(error, opts);
                 SaveCache();
+                SaveHistory();
                 if (error != null && outcome == RefreshOutcome.Completed)
                 {
                     outcome = RefreshOutcome.Failed;
@@ -441,6 +450,10 @@ namespace GGDealsWishlist.Services
                         foreach (var pair in p.BatchResults)
                         {
                             cache.Prices[pair.Key] = pair.Value;
+                            if (history.Record(pair.Key, pair.Value))
+                            {
+                                historyDirty = true;
+                            }
                         }
 
                         cache.PricesUpdatedUtc = clock.UtcNow;
@@ -621,6 +634,19 @@ namespace GGDealsWishlist.Services
             RecomputeMatches();
             Rebuild();
             RaiseStatusChanged();
+        }
+
+        /// <summary>Forgets every price this extension recorded. Separate from <see cref="ClearCache"/>, which keeps history.</summary>
+        public void ClearPriceHistory()
+        {
+            lock (sync)
+            {
+                history = new PriceHistoryDocument();
+                historyDirty = true;
+            }
+
+            SaveHistory();
+            Rebuild();
         }
 
         public Task<ConnectionTestResult> TestConnectionAsync(string apiKey, string region)
@@ -897,7 +923,9 @@ namespace GGDealsWishlist.Services
                         {
                             matchCache.TryGetValue(entry.Key, out var match);
                             state.Memberships.TryGetValue(entry.Key, out var memberships);
-                            built.Add(WishlistItemFactory.Create(entry, PriceFor(entry), match, favourites.Contains(entry.Key), memberships, opts, now, staleAfter));
+                            var resolved = WishlistItemFactory.Create(entry, PriceFor(entry), match, favourites.Contains(entry.Key), memberships, opts, now, staleAfter);
+                            resolved.PriceHistory = entry.PriceKey.HasValue ? history.Get(entry.PriceKey.Value.ToString())?.Snapshot() : null;
+                            built.Add(resolved);
                         }
                         catch (Exception e)
                         {
@@ -1016,6 +1044,47 @@ namespace GGDealsWishlist.Services
             }
 
             cacheStore.Save(copy);
+        }
+
+        /// <summary>
+        /// Prices this extension recorded for a lookup key ("app:420"), or null when none. Returns a copy so callers
+        /// on other threads can read it freely.
+        /// </summary>
+        public PriceSeries GetPriceSeries(string lookupKey)
+        {
+            lock (sync)
+            {
+                return history.Get(lookupKey)?.Snapshot();
+            }
+        }
+
+        private void SaveHistory()
+        {
+            if (historyStore == null)
+            {
+                return;
+            }
+
+            PriceHistoryDocument copy;
+            lock (sync)
+            {
+                // Games removed from the wishlist stop accumulating history.
+                var tracked = new HashSet<string>(cache.WishlistEntries.Where(e => e.PriceKey.HasValue).Select(e => e.PriceKey.Value.ToString()));
+                if (tracked.Count > 0 && history.Prune(tracked) > 0)
+                {
+                    historyDirty = true;
+                }
+
+                if (!historyDirty)
+                {
+                    return;
+                }
+
+                historyDirty = false;
+                copy = Json.Deserialize<PriceHistoryDocument>(Json.Serialize(history));
+            }
+
+            historyStore.Save(copy);
         }
 
         private void ScheduleStateSave()

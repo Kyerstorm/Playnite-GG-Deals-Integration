@@ -30,7 +30,8 @@ namespace GGDealsWishlist.Models
     {
         CoverInfo = 0,
         Compact = 1,
-        List = 2
+        List = 2,
+        Grid = 3
     }
 
     public enum SortMode
@@ -321,6 +322,9 @@ namespace GGDealsWishlist.Models
         public WishlistEntry Entry { get; set; }
 
         public PriceData Price { get; set; }
+
+        /// <summary>Prices this extension recorded across refreshes; null until a price has been fetched.</summary>
+        public PriceSeries PriceHistory { get; set; }
 
         public MatchResult Match { get; set; } = MatchResult.NoMatch;
 

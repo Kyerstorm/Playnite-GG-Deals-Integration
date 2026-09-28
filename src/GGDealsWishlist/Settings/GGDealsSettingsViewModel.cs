@@ -48,6 +48,7 @@ namespace GGDealsWishlist.Settings
             UndoRemoveKeyCommand = new RelayCommand(() => IsKeyMarkedForRemoval = false);
             RefreshNowCommand = new AsyncRelayCommand(RefreshNowAsync, () => !service.Status.IsRefreshing);
             ClearCacheCommand = new RelayCommand(ClearCache);
+            ClearPriceHistoryCommand = new RelayCommand(ClearPriceHistory);
             ManageCollectionsCommand = new RelayCommand(() => host.ShowCollectionsManager());
             OpenApiInfoCommand = new RelayCommand(() => host.OpenUrl(SidebarViewModel.ApiInfoUrl));
             OpenWishlistCommand = new RelayCommand(() => host.OpenUrl(settings.GGDealsWishlistUrl));
@@ -80,7 +81,8 @@ namespace GGDealsWishlist.Settings
         {
             new Option<ViewMode>(ViewMode.CoverInfo, "Cover + information"),
             new Option<ViewMode>(ViewMode.Compact, "Compact"),
-            new Option<ViewMode>(ViewMode.List, "List")
+            new Option<ViewMode>(ViewMode.List, "List"),
+            new Option<ViewMode>(ViewMode.Grid, "Grid")
         };
 
         public IReadOnlyList<Option<ThemeMode>> ThemeOptions { get; } = new List<Option<ThemeMode>>
@@ -346,6 +348,8 @@ namespace GGDealsWishlist.Settings
         public ICommand UndoRemoveKeyCommand { get; }
         public ICommand RefreshNowCommand { get; }
         public ICommand ClearCacheCommand { get; }
+
+        public ICommand ClearPriceHistoryCommand { get; }
         public ICommand ManageCollectionsCommand { get; }
         public ICommand OpenApiInfoCommand { get; }
         public ICommand OpenWishlistCommand { get; }
@@ -554,6 +558,17 @@ namespace GGDealsWishlist.Settings
             ActionStatus = "✓ Cache cleared.";
         }
 
+        private void ClearPriceHistory()
+        {
+            if (!host.Confirm("Delete the recorded price history for every game? The history is built from your own refreshes and cannot be downloaded again.", "Clear price history"))
+            {
+                return;
+            }
+
+            service.ClearPriceHistory();
+            ActionStatus = "✓ Price history cleared.";
+        }
+
         private void ResetInformationFields()
         {
             var defaults = new GGDealsSettings();
@@ -572,6 +587,7 @@ namespace GGDealsWishlist.Settings
             settings.ShowStoreCount = defaults.ShowStoreCount;
             settings.ShowFavouriteStar = defaults.ShowFavouriteStar;
             settings.ShowCollections = defaults.ShowCollections;
+            settings.ShowPriceHistory = defaults.ShowPriceHistory;
             settings.ShowGameCount = defaults.ShowGameCount;
             settings.ShowOnSaleCount = defaults.ShowOnSaleCount;
             settings.ShowHistoricalLowCount = defaults.ShowHistoricalLowCount;

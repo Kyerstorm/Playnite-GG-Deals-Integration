@@ -180,9 +180,149 @@
 
         <!-- ============================== Item templates ============================== -->
 
+        <Style x:Key="GG.ExpandButton" TargetType="Button" BasedOn="{StaticResource GG.IconButton}">
+            <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinWidth" Value="24" />
+            <Setter Property="Padding" Value="2,0" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Content" Value="{Binding ExpandGlyph}" />
+            <Setter Property="ToolTip" Value="{Binding ExpandTooltip}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding ExpandTooltip}" />
+            <Setter Property="Command" Value="{Binding DataContext.ToggleExpandedCommand, ElementName=Root}" />
+            <Setter Property="CommandParameter" Value="{Binding}" />
+        </Style>
+
+        <ItemsPanelTemplate x:Key="GG.StackPanelTemplate">
+            <VirtualizingStackPanel />
+        </ItemsPanelTemplate>
+
+        <ItemsPanelTemplate x:Key="GG.WrapPanelTemplate">
+            <WrapPanel />
+        </ItemsPanelTemplate>
+
+        <!-- Recorded prices: only what this extension saw on its own refreshes (the GG.deals API has no history). -->
+        <DataTemplate x:Key="PriceHistorySectionTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <StackPanel MaxWidth="560" HorizontalAlignment="Stretch" Visibility="{Binding Display.ShowPriceHistory, Converter={StaticResource Vis}}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource GG.Muted}" Text="{Binding HistoryRangeText}" Margin="8,0,0,0" />
+                    <TextBlock Style="{StaticResource GG.SectionLabel}" Text="PRICE HISTORY" Margin="0,0,0,3" />
+                </DockPanel>
+                <Border Background="{DynamicResource GG.Background}" CornerRadius="4" Padding="6,6,6,4" Visibility="{Binding HasPriceHistory, Converter={StaticResource Vis}}">
+                    <StackPanel>
+                        <Viewbox Stretch="Uniform" StretchDirection="Both">
+                            <Canvas Width="380" Height="70">
+                                <Polyline Points="{Binding HistoryLinePoints}" Stroke="{DynamicResource GG.Text}" StrokeThickness="1.8" StrokeLineJoin="Round" />
+                                <Path Data="{Binding HistoryMarkers}" Fill="{Binding Display.AccentBrush}" />
+                            </Canvas>
+                        </Viewbox>
+                        <Grid Margin="0,2,0,0">
+                            <TextBlock Style="{StaticResource GG.Muted}" FontSize="10.5" HorizontalAlignment="Left">
+                                <Run Text="High" /> <Run Text="{Binding HistoryMaxText, Mode=OneWay}" />
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource GG.Muted}" FontSize="10.5" HorizontalAlignment="Right">
+                                <Run Text="Low" /> <Run Text="{Binding HistoryMinText, Mode=OneWay}" />
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource GG.Background}" CornerRadius="4" Padding="10,8" Visibility="{Binding IsNewInHistory, Converter={StaticResource Vis}}">
+                    <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding HistoryEmptyText}" TextWrapping="Wrap" TextTrimming="None" />
+                </Border>
+                <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding HistoryCaption}" Margin="0,3,0,0" TextWrapping="Wrap" TextTrimming="None" FontSize="10.5" />
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Retail and keyshop prices are kept apart, as everywhere else in the extension. -->
+        <DataTemplate x:Key="PriceTypeTableTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource GG.SectionLabel}" Text="CURRENT VS LOWEST EVER" Margin="0,12,0,3" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="70" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Column="1" Text="Now" Style="{StaticResource GG.Muted}" TextAlignment="Right" />
+                    <TextBlock Grid.Column="2" Text="Lowest" Style="{StaticResource GG.Muted}" TextAlignment="Right" />
+                    <TextBlock Grid.Row="1" Text="Official stores" FontWeight="SemiBold" FontSize="12.5" Margin="0,3" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CurrentRetailText}" FontWeight="SemiBold" TextAlignment="Right" Margin="0,3" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding HistoricalRetailText}" Foreground="{DynamicResource GG.TextMuted}" TextAlignment="Right" Margin="0,3" />
+                    <TextBlock Grid.Row="2" Text="Keyshops" FontWeight="SemiBold" FontSize="12.5" Margin="0,3" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CurrentKeyshopText}" FontWeight="SemiBold" TextAlignment="Right" Margin="0,3" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding HistoricalKeyshopText}" Foreground="{DynamicResource GG.TextMuted}" TextAlignment="Right" Margin="0,3" />
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ExpandedDetailsTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <Border Tag="gg-expanded-panel" BorderBrush="{DynamicResource GG.Border}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="0,10,0,0" Cursor="Arrow">
+                <!-- Narrow: history above the prices. Wide (440px and up): prices and buttons on the left, history beside them. -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource PriceHistorySectionTemplate}">
+                        <ContentControl.Style>
+                            <Style TargetType="ContentControl">
+                                <Setter Property="Grid.Row" Value="0" />
+                                <Setter Property="Grid.Column" Value="0" />
+                                <Setter Property="Grid.ColumnSpan" Value="2" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Display.IsWide}" Value="True">
+                                        <Setter Property="Grid.Column" Value="1" />
+                                        <Setter Property="Grid.ColumnSpan" Value="1" />
+                                        <Setter Property="Margin" Value="28,0,0,0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ContentControl.Style>
+                    </ContentControl>
+
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Grid.Row" Value="1" />
+                                <Setter Property="Grid.Column" Value="0" />
+                                <Setter Property="Grid.ColumnSpan" Value="2" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Display.IsWide}" Value="True">
+                                        <Setter Property="Grid.Row" Value="0" />
+                                        <Setter Property="Grid.ColumnSpan" Value="1" />
+                                        <Setter Property="MinWidth" Value="280" />
+                                        <Setter Property="MaxWidth" Value="340" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource PriceTypeTableTemplate}" />
+                        <WrapPanel Margin="0,12,0,0">
+                            <Button Style="{StaticResource GG.ActionButton}" Content="OPEN GG.DEALS" Margin="0,0,6,0" CommandParameter="{Binding}"
+                                    Command="{Binding DataContext.OpenGGDealsCommand, ElementName=Root}" />
+                            <Button Style="{StaticResource GG.SecondaryButton}" Content="FULL DETAILS" Margin="0,0,6,0" CommandParameter="{Binding}"
+                                    Command="{Binding DataContext.OpenDetailsCommand, ElementName=Root}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
         <DataTemplate x:Key="CoverCardTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
             <Border x:Name="Card" Background="{DynamicResource GG.Card}" CornerRadius="4" BorderThickness="1" BorderBrush="Transparent"
                     Padding="{Binding Display.CardPadding}" Margin="{Binding Display.CardMargin}" ToolTip="{Binding Tooltip}">
+                <StackPanel>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -200,6 +340,7 @@
                     <StackPanel Grid.Column="1" MinWidth="0">
                         <DockPanel LastChildFill="True">
                             <Button DockPanel.Dock="Right" Style="{StaticResource GG.StarButton}" />
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GG.ExpandButton}" />
                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{Binding Display.TitleFontSize}" TextWrapping="Wrap"
                                        TextTrimming="CharacterEllipsis" MaxHeight="40" Margin="0,2,4,0"
                                        Visibility="{Binding Display.ShowTitle, Converter={StaticResource Vis}}" />
@@ -216,6 +357,9 @@
                                 </Border.Visibility>
                                 <TextBlock Text="{Binding DiscountText}" FontWeight="Bold" FontSize="12" Foreground="{Binding Display.AccentForegroundBrush}" />
                             </Border>
+                            <Polyline Points="{Binding SparklinePoints}" Width="80" Height="24" Stroke="{Binding Display.AccentBrush}" StrokeThickness="1.6"
+                                      StrokeLineJoin="Round" VerticalAlignment="Center" Margin="2,0,0,0" ToolTip="Prices this extension recorded on each refresh"
+                                      Visibility="{Binding HasPriceHistory, Converter={StaticResource Vis}}" />
                         </WrapPanel>
 
                         <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding PriceSourceText}" Margin="0,1,0,0">
@@ -322,8 +466,14 @@
                         </WrapPanel>
                     </StackPanel>
                 </Grid>
+                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ExpandedDetailsTemplate}"
+                                Visibility="{Binding IsExpanded, Converter={StaticResource Vis}}" />
+                </StackPanel>
             </Border>
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{Binding Display.AccentBrush}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding HasPrice}" Value="False">
                     <Setter TargetName="Price" Property="FontSize" Value="12.5" />
                     <Setter TargetName="Price" Property="FontWeight" Value="Normal" />
@@ -473,12 +623,99 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <DataTemplate x:Key="GridTileTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <Border x:Name="Tile" Margin="4" Background="{DynamicResource GG.Card}" CornerRadius="4"
+                    BorderThickness="1" BorderBrush="Transparent" ToolTip="{Binding Tooltip}">
+                <StackPanel>
+                    <Grid Height="{Binding Display.GridCoverHeight}" Visibility="{Binding Display.ShowCover, Converter={StaticResource Vis}}">
+                        <Border Background="{DynamicResource GG.Placeholder}" CornerRadius="3,3,0,0">
+                            <TextBlock Text="🎮" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource GG.TextMuted}" />
+                        </Border>
+                        <Image v:CoverImage.DecodeWidth="460" v:CoverImage.Source="{Binding CapsuleSource}" Stretch="UniformToFill" />
+                        <Border Background="{Binding Display.AccentBrush}" CornerRadius="0,3,3,0" Padding="6,2" Margin="0,8,0,0"
+                                HorizontalAlignment="Left" VerticalAlignment="Top">
+                            <Border.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="HasDiscount" />
+                                    <Binding Path="Display.ShowDiscount" />
+                                </MultiBinding>
+                            </Border.Visibility>
+                            <TextBlock Text="{Binding DiscountText}" FontWeight="Bold" FontSize="12" Foreground="{Binding Display.AccentForegroundBrush}" />
+                        </Border>
+                        <Border Background="#99000000" CornerRadius="4" Margin="4" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Visibility="{Binding Display.ShowFavouriteStar, Converter={StaticResource Vis}}">
+                            <Button Style="{StaticResource GG.StarButton}" />
+                        </Border>
+                    </Grid>
+                    <StackPanel Margin="10,8,10,10">
+                        <DockPanel LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GG.ExpandButton}" Margin="0,-3,-4,0" />
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{Binding Display.TitleFontSize}" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis" MaxHeight="40" Visibility="{Binding Display.ShowTitle, Converter={StaticResource Vis}}" />
+                        </DockPanel>
+                        <TextBlock x:Name="Price" Text="{Binding PriceText}" FontSize="{Binding Display.PriceFontSize}" FontWeight="Bold" Margin="0,4,0,0"
+                                   Visibility="{Binding Display.ShowCurrentPrice, Converter={StaticResource Vis}}" />
+                        <TextBlock Text="🔥 Historical low" FontSize="10.5" FontWeight="SemiBold" Foreground="{Binding Display.AccentBrush}" Margin="0,3,0,0">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="IsHistoricalLow" />
+                                    <Binding Path="Display.ShowHistoricalLowBadge" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <TextBlock Text="✓ Owned" FontSize="10.5" Foreground="{DynamicResource GG.Success}" Margin="0,3,0,0">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllVis}">
+                                    <Binding Path="IsOwned" />
+                                    <Binding Path="Display.ShowOwnership" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasPrice}" Value="False">
+                    <Setter TargetName="Price" Property="FontSize" Value="12" />
+                    <Setter TargetName="Price" Property="FontWeight" Value="Normal" />
+                    <Setter TargetName="Price" Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Tile" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Tile" Property="BorderBrush" Value="{Binding Display.AccentBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- An expanded tile becomes a full-width cover card, so it takes its own row in the wrapping grid. -->
+        <DataTemplate x:Key="GridExpandedTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <ContentControl Content="{Binding}" ContentTemplate="{StaticResource CoverCardTemplate}" />
+        </DataTemplate>
+
+        <DataTemplate x:Key="GridItemTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
+            <ContentControl Content="{Binding}">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="ContentTemplate" Value="{StaticResource GridTileTemplate}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                <Setter Property="ContentTemplate" Value="{StaticResource GridExpandedTemplate}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+        </DataTemplate>
+
         <Style x:Key="GG.ItemContainer" TargetType="ListBoxItem">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Margin" Value="0" />
             <Setter Property="Focusable" Value="True" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Width" Value="{Binding ItemWidth}" />
             <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -666,7 +903,6 @@
                      Padding="10,0,6,0"
                      HorizontalContentAlignment="Stretch"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.CanContentScroll="True"
                      ScrollViewer.PanningMode="VerticalOnly"
                      VirtualizingPanel.IsVirtualizing="True"
                      VirtualizingPanel.VirtualizationMode="Recycling"
@@ -680,15 +916,20 @@
                 <ListBox.ContextMenu>
                     <ContextMenu />
                 </ListBox.ContextMenu>
-                <ListBox.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <VirtualizingStackPanel />
-                    </ItemsPanelTemplate>
-                </ListBox.ItemsPanel>
                 <ListBox.Style>
                     <Style TargetType="ListBox">
                         <Setter Property="ItemTemplate" Value="{StaticResource CoverCardTemplate}" />
+                        <Setter Property="ItemsPanel" Value="{StaticResource GG.StackPanelTemplate}" />
+                        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
                         <Style.Triggers>
+                            <!-- Grid tiles, and cover cards in a wide sidebar, wrap left to right; the panel is not virtualized. -->
+                            <DataTrigger Binding="{Binding Display.IsWrapped}" Value="True">
+                                <Setter Property="ItemsPanel" Value="{StaticResource GG.WrapPanelTemplate}" />
+                                <Setter Property="ScrollViewer.CanContentScroll" Value="False" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding EffectiveViewMode}" Value="{x:Static models:ViewMode.Grid}">
+                                <Setter Property="ItemTemplate" Value="{StaticResource GridItemTemplate}" />
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding EffectiveViewMode}" Value="{x:Static models:ViewMode.Compact}">
                                 <Setter Property="ItemTemplate" Value="{StaticResource CompactTemplate}" />
                             </DataTrigger>
@@ -903,6 +1144,8 @@
                             </TextBlock>
                         </StackPanel>
                     </Grid>
+
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource PriceHistorySectionTemplate}" Margin="0,14,0,0" />
 
                     <!-- Store offers (only when the provider supplies them) -->
                     <StackPanel Visibility="{Binding HasOffers, Converter={StaticResource Vis}}">

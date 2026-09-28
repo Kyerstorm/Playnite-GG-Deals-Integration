@@ -86,6 +86,32 @@ namespace PreviewApp
                 s.RenderControl(output, "12-collections", 560, 420, () => new CollectionsManagerView(new CollectionsManagerViewModel(s.Service, s.Host), ThemeMode.Dark), dark);
             }
 
+            // Price history: the first scenario has a single recorded price per game ("tracking started").
+            using (var s = Scenario.Create(withKey: true, manual: true))
+            {
+                s.RenderSidebar(output, "19-cover-expanded-new-360", 360, 800, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First()));
+
+                // Three more refreshes over nine days with prices moving, so every game has a line to draw.
+                foreach (var scale in new[] { 0.95m, 0.95m, 0.85m })
+                {
+                    s.Clock.Advance(TimeSpan.FromDays(3));
+                    s.Api.PriceScale = scale;
+                    s.Service.RefreshAsync(RefreshTrigger.Manual).GetAwaiter().GetResult();
+                }
+
+                s.RenderSidebar(output, "20-cover-history-360", 360, 800, ViewMode.CoverInfo, ThemeMode.Dark, dark);
+                s.RenderSidebar(output, "21-cover-expanded-history-360", 360, 1000, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First(i => i.Title.StartsWith("Hollow"))));
+                s.RenderSidebar(output, "22-grid-dark-360", 360, 900, ViewMode.Grid, ThemeMode.Dark, dark);
+                s.RenderSidebar(output, "23-grid-expanded-360", 360, 1100, ViewMode.Grid, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First(i => i.Title.StartsWith("Hollow"))));
+                s.RenderSidebar(output, "24-grid-wide-680", 680, 900, ViewMode.Grid, ThemeMode.Dark, dark);
+                s.RenderSidebar(output, "25-grid-light-360", 360, 900, ViewMode.Grid, ThemeMode.Light, light);
+                s.RenderSidebar(output, "29-cover-columns-1000", 1000, 900, ViewMode.CoverInfo, ThemeMode.Dark, dark);
+                s.RenderSidebar(output, "30-cover-columns-1800", 1800, 900, ViewMode.CoverInfo, ThemeMode.Dark, dark);
+                s.RenderSidebar(output, "27-cover-expanded-wide-1800", 1800, 900, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First(i => i.Title.StartsWith("Hollow"))));
+                s.RenderSidebar(output, "28-grid-expanded-wide-1800", 1800, 900, ViewMode.Grid, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First(i => i.Title.StartsWith("Terraria"))));
+                s.RenderSidebar(output, "26-details-history-360", 360, 1500, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm => vm.OpenDetails(vm.Items.First(i => i.Title.StartsWith("Hollow"))));
+            }
+
             using (var s = Scenario.Create(withKey: false, manual: false))
             {
                 s.RenderSidebar(output, "13-first-run-340", 340, 700, ViewMode.CoverInfo, ThemeMode.Dark, dark);
@@ -174,7 +200,8 @@ namespace PreviewApp
                     new VersionedJsonStore<LocalStateDocument>(Path.Combine(dir, "state.json"), LocalStateDocument.CurrentVersion),
                     new PreviewLibrary(),
                     () => settings.ToServiceOptions(),
-                    scenario.Clock);
+                    scenario.Clock,
+                    new VersionedJsonStore<PriceHistoryDocument>(Path.Combine(dir, "price-history.json"), PriceHistoryDocument.CurrentVersion));
                 scenario.Host.Service = scenario.Service;
 
                 scenario.Service.InitializeAsync().GetAwaiter().GetResult();
@@ -341,6 +368,11 @@ this is not a steam id";
 
             public ApiErrorKind FailWith { get; set; }
 
+            /// <summary>Multiplies current prices so a scenario can build a price history across several refreshes.</summary>
+            public decimal PriceScale { get; set; } = 1m;
+
+            private decimal? Scaled(decimal? price) => price.HasValue ? Math.Round(price.Value * PriceScale, 2) : (decimal?)null;
+
             public Task<PriceApiResult> GetPricesAsync(SteamIdType type, IReadOnlyCollection<long> ids, string region, string apiKey, CancellationToken cancellationToken)
             {
                 if (FailWith != ApiErrorKind.None)
@@ -362,8 +394,8 @@ this is not a steam id";
                         Found = true,
                         GGDealsTitle = Titles.TryGetValue(id, out var title) ? title : null,
                         GGDealsUrl = "https://gg.deals/game/" + id + "/",
-                        CurrentRetail = p[0],
-                        CurrentKeyshops = p[1],
+                        CurrentRetail = Scaled(p[0]),
+                        CurrentKeyshops = Scaled(p[1]),
                         HistoricalRetail = p[2],
                         HistoricalKeyshops = p[3],
                         Currency = "GBP",

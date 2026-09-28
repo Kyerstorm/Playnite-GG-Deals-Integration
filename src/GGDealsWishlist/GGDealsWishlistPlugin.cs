@@ -79,7 +79,8 @@ namespace GGDealsWishlist
                 new VersionedJsonStore<CacheDocument>(Path.Combine(dataDirectory, "cache.json"), CacheDocument.CurrentVersion),
                 new VersionedJsonStore<LocalStateDocument>(Path.Combine(dataDirectory, "state.json"), LocalStateDocument.CurrentVersion),
                 new PlayniteLibrarySource(api),
-                () => settings.ToServiceOptions());
+                () => settings.ToServiceOptions(),
+                historyStore: new VersionedJsonStore<PriceHistoryDocument>(Path.Combine(dataDirectory, "price-history.json"), PriceHistoryDocument.CurrentVersion));
 
             scheduler = new RefreshScheduler(service);
             libraryDebounce = new Timer(_ => SafeRun(service.OnLibraryChanged, "Library update failed"), null, Timeout.Infinite, Timeout.Infinite);

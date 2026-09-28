@@ -234,6 +234,7 @@
                 <CheckBox Content="Store count" IsChecked="{Binding Settings.ShowStoreCount}" Width="200" />
                 <CheckBox Content="Favourite star" IsChecked="{Binding Settings.ShowFavouriteStar}" Width="200" />
                 <CheckBox Content="Collections" IsChecked="{Binding Settings.ShowCollections}" Width="200" />
+                <CheckBox Content="Price history" IsChecked="{Binding Settings.ShowPriceHistory}" Width="200" />
             </WrapPanel>
             <TextBlock Style="{StaticResource Hint}" Text="Fields are only shown when data is available. Discounts, ratings, platforms and store counts are not part of the current GG.deals Prices API." />
 
@@ -267,7 +268,9 @@
             <!-- ============================== Advanced ============================== -->
             <TextBlock Style="{StaticResource Section}" Text="Advanced" />
             <Button Style="{StaticResource Action}" Content="Clear cached data…" Command="{Binding ClearCacheCommand}" HorizontalAlignment="Left" />
-            <TextBlock Style="{StaticResource Hint}" Text="Removes cached wishlist and price data. Favourites, collections and ownership decisions are kept." />
+            <TextBlock Style="{StaticResource Hint}" Text="Removes cached wishlist and price data. Favourites, collections and ownership decisions are kept. Recorded price history is kept too." />
+            <Button Style="{StaticResource Action}" Content="Clear price history…" Command="{Binding ClearPriceHistoryCommand}" HorizontalAlignment="Left" Margin="0,10,0,0" />
+            <TextBlock Style="{StaticResource Hint}" Text="Price history is built from the prices this extension sees on each refresh, so it starts empty and only covers the time it has been running. It is stored locally and cannot be downloaded again." />
 
             <TextBlock Margin="0,24,0,0" FontSize="12" Foreground="{DynamicResource GG.TextMuted}" TextWrapping="Wrap">
                 <Run Text="Prices powered by" />

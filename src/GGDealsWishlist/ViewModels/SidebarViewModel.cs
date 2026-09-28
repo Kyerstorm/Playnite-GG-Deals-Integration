@@ -83,6 +83,7 @@ namespace GGDealsWishlist.ViewModels
             searchText = filter.SearchText;
             customMaxPriceText = filter.CustomMaxPrice?.ToString("0.##", CultureInfo.CurrentCulture);
             Display.Update(host.Settings, availableWidth);
+            UpdateLayout();
 
             searchTimer = new DispatcherTimer(DispatcherPriority.Background, host.Dispatcher) { Interval = TimeSpan.FromMilliseconds(200) };
             searchTimer.Tick += (s, e) =>
@@ -100,7 +101,8 @@ namespace GGDealsWishlist.ViewModels
             RefreshCommand = new AsyncRelayCommand(() => RefreshAsync(), () => !IsRefreshing);
             RetryCommand = RefreshCommand;
             OpenSettingsCommand = new RelayCommand(() => host.OpenSettings());
-            CycleViewModeCommand = new RelayCommand(() => ViewMode = (ViewMode)(((int)ViewMode + 1) % 3));
+            CycleViewModeCommand = new RelayCommand(() => ViewMode = (ViewMode)(((int)ViewMode + 1) % 4));
+            ToggleExpandedCommand = new RelayCommand(p => ToggleExpanded(p as WishlistItemViewModel));
             SetViewModeCommand = new RelayCommand(p => { if (p is ViewMode mode) { ViewMode = mode; } else if (Enum.TryParse(p as string, out ViewMode parsed)) { ViewMode = parsed; } });
             SetQuickFilterCommand = new RelayCommand(p => { if (Enum.TryParse(p as string, out QuickFilter quick)) { Quick = quick; } else if (p is QuickFilter q) { Quick = q; } });
             ClearFiltersCommand = new RelayCommand(ClearFilters);
@@ -410,17 +412,76 @@ namespace GGDealsWishlist.ViewModels
                     OnPropertyChanged(nameof(EffectiveViewMode));
                     OnPropertyChanged(nameof(ViewModeGlyph));
                     OnPropertyChanged(nameof(ViewModeTooltip));
+                    UpdateLayout();
                     SaveUiState();
                 }
             }
         }
 
         /// <summary>Cover cards fall back to compact rows when the sidebar is too narrow for them.</summary>
-        public ViewMode EffectiveViewMode => viewMode == ViewMode.CoverInfo && availableWidth < 230 ? ViewMode.Compact : viewMode;
+        public ViewMode EffectiveViewMode => (viewMode == ViewMode.CoverInfo || viewMode == ViewMode.Grid) && availableWidth < 230 ? ViewMode.Compact : viewMode;
 
-        public string ViewModeGlyph => viewMode == ViewMode.CoverInfo ? "▦" : viewMode == ViewMode.Compact ? "☷" : "☰";
+        public string ViewModeGlyph => viewMode == ViewMode.CoverInfo ? "▦" : viewMode == ViewMode.Compact ? "☷" : viewMode == ViewMode.List ? "☰" : "⊞";
 
-        public string ViewModeTooltip => "View: " + (viewMode == ViewMode.CoverInfo ? "Cover + information" : viewMode == ViewMode.Compact ? "Compact" : "List") + " (click to change)";
+        public string ViewModeTooltip => "View: " + (viewMode == ViewMode.CoverInfo ? "Cover + information" : viewMode == ViewMode.Compact ? "Compact" : viewMode == ViewMode.List ? "List" : "Grid") + " (click to change)";
+
+        private string layoutKey;
+
+        /// <summary>
+        /// Tells the display options which layout is showing and, when the number of columns (or the switch between
+        /// stacked and wrapped) changes, refreshes every item so its slot width follows.
+        /// </summary>
+        private void UpdateLayout()
+        {
+            Display.SetLayout(EffectiveViewMode);
+            var key = Display.IsWrapped.ToString() + ":" + Display.ColumnCount.ToString(CultureInfo.InvariantCulture);
+            var columnsChanged = key != layoutKey;
+            layoutKey = key;
+            foreach (var vm in itemCache.Values)
+            {
+                if (columnsChanged)
+                {
+                    vm.RefreshDisplay();
+                }
+                else if (Display.IsWrapped)
+                {
+                    vm.RefreshLayout();
+                }
+            }
+        }
+
+        /// <summary>Cover cards and grid tiles open in place; the compact modes have no room, so they open the full details.</summary>
+        public bool SupportsInlineExpand => EffectiveViewMode == ViewMode.CoverInfo || EffectiveViewMode == ViewMode.Grid;
+
+        /// <summary>What a click or Enter on a wishlist row does in the current view.</summary>
+        public void ActivateItem(WishlistItemViewModel item)
+        {
+            if (SupportsInlineExpand)
+            {
+                ToggleExpanded(item);
+            }
+            else
+            {
+                OpenDetails(item);
+            }
+        }
+
+        /// <summary>Opens a card in place (closing any other open card); a second toggle closes it again.</summary>
+        public void ToggleExpanded(WishlistItemViewModel item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            var open = !item.IsExpanded;
+            foreach (var other in itemCache.Values)
+            {
+                other.IsExpanded = false;
+            }
+
+            item.IsExpanded = open;
+        }
 
         public double AvailableWidth
         {
@@ -445,6 +506,8 @@ namespace GGDealsWishlist.ViewModels
                         vm.RefreshDisplay();
                     }
                 }
+
+                UpdateLayout();
             }
         }
 
@@ -668,6 +731,7 @@ namespace GGDealsWishlist.ViewModels
         public ICommand RetryCommand { get; }
         public ICommand OpenSettingsCommand { get; }
         public ICommand CycleViewModeCommand { get; }
+        public ICommand ToggleExpandedCommand { get; }
         public ICommand SetViewModeCommand { get; }
         public ICommand SetQuickFilterCommand { get; }
         public ICommand ClearFiltersCommand { get; }
@@ -885,6 +949,7 @@ namespace GGDealsWishlist.ViewModels
                 vm.RefreshDisplay();
             }
 
+            UpdateLayout();
             OnPropertyChanged(nameof(HideOwned));
             OnPropertyChanged(nameof(HasApiKey));
             OnPropertyChanged(nameof(PriceOptions));

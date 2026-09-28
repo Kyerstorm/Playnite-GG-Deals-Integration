@@ -436,7 +436,8 @@ namespace GGDealsWishlist.Tests
                 return new WishlistDataService(registry, prices, tracker,
                     new VersionedJsonStore<CacheDocument>(Dir.File("cache.json"), 1),
                     new VersionedJsonStore<LocalStateDocument>(Dir.File("state.json"), 1),
-                    Library, () => Options, Clock);
+                    Library, () => Options, Clock,
+                    new VersionedJsonStore<PriceHistoryDocument>(Dir.File("price-history.json"), PriceHistoryDocument.CurrentVersion));
             }
 
             public void Dispose()
@@ -486,6 +487,105 @@ namespace GGDealsWishlist.Tests
 
                 h.Clock.Advance(TimeSpan.FromMinutes(60));
                 Assert.True(h.Service.IsAutoRefreshDue());
+            }
+        }
+
+        private static void PricedAt(Harness h, decimal retail)
+        {
+            h.Api.Responder = ids =>
+            {
+                var result = new PriceApiResult();
+                foreach (var id in ids)
+                {
+                    result.Items[id] = new PriceData { LookupKey = "app:" + id, Found = true, GGDealsTitle = "Game " + id, CurrentRetail = retail, HistoricalRetail = 5m, Currency = "GBP", Region = "gb" };
+                }
+
+                return result;
+            };
+        }
+
+        [Fact]
+        public async Task Refreshes_record_price_history_that_survives_a_restart()
+        {
+            using (var h = new Harness())
+            {
+                await h.Service.InitializeAsync();
+                PricedAt(h, 20m);
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                h.Clock.Advance(TimeSpan.FromMinutes(20));
+                PricedAt(h, 15m);
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+
+                var series = h.Service.GetPriceSeries("app:1");
+                Assert.Equal(new decimal?[] { 20m, 15m }, series.Points.Select(p => p.Retail).ToArray());
+                Assert.Equal(2, h.Service.Items[0].PriceHistory.Points.Count);
+
+                var restarted = h.Create();
+                await restarted.InitializeAsync();
+                Assert.Equal(2, restarted.Items[0].PriceHistory.Points.Count);
+                restarted.Dispose();
+            }
+        }
+
+        [Fact]
+        public async Task An_unchanged_price_does_not_add_a_history_point()
+        {
+            using (var h = new Harness())
+            {
+                await h.Service.InitializeAsync();
+                PricedAt(h, 20m);
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                h.Clock.Advance(TimeSpan.FromMinutes(20));
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+
+                var series = h.Service.GetPriceSeries("app:1");
+                Assert.Single(series.Points);
+                Assert.Equal(Start.AddMinutes(20), series.LastSeenUtc);
+            }
+        }
+
+        [Fact]
+        public async Task Clearing_the_cache_keeps_history_but_clearing_history_keeps_prices()
+        {
+            using (var h = new Harness())
+            {
+                await h.Service.InitializeAsync();
+                PricedAt(h, 20m);
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+
+                h.Service.ClearCache();
+                Assert.NotNull(h.Service.GetPriceSeries("app:1"));
+
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                h.Service.ClearPriceHistory();
+
+                Assert.Null(h.Service.GetPriceSeries("app:1"));
+                Assert.Null(h.Service.Items[0].PriceHistory);
+                Assert.NotNull(h.Service.Items[0].Price);
+
+                var restarted = h.Create();
+                await restarted.InitializeAsync();
+                Assert.Null(restarted.GetPriceSeries("app:1"));
+                restarted.Dispose();
+            }
+        }
+
+        [Fact]
+        public async Task Games_removed_from_the_wishlist_lose_their_history()
+        {
+            using (var h = new Harness())
+            {
+                await h.Service.InitializeAsync();
+                PricedAt(h, 20m);
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                Assert.NotNull(h.Service.GetPriceSeries("app:2"));
+
+                h.ManualText = "1";
+                h.Clock.Advance(TimeSpan.FromMinutes(20));
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+
+                Assert.NotNull(h.Service.GetPriceSeries("app:1"));
+                Assert.Null(h.Service.GetPriceSeries("app:2"));
             }
         }
 

@@ -120,6 +120,9 @@ namespace GGDealsWishlist.Settings
 
         public bool ShowCollections { get; set; } = true;
 
+        /// <summary>Price trend sparkline on cards and the recorded-price chart in the expanded card.</summary>
+        public bool ShowPriceHistory { get; set; } = true;
+
         // Prices
         public PricePreference PricePreference { get; set; } = PricePreference.Retail;
 
