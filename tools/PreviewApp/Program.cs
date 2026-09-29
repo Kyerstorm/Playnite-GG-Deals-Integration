@@ -488,6 +488,10 @@ this is not a steam id";
 
             public string PromptText(string message, string caption, string defaultValue) => null;
 
+            public string PickImageFile() => null;
+
+            public string PickSteamGridDbCover(long? steamAppId, string title) => null;
+
             public bool Confirm(string message, string caption) => false;
 
             public void ShowCollectionsManager()

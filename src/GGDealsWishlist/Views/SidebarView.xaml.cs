@@ -199,6 +199,12 @@ namespace GGDealsWishlist.Views
             items.Add(new Separator());
             if (single != null)
             {
+                var coverMenu = new MenuItem { Header = "Change Cover" };
+                coverMenu.Items.Add(CreateMenuItem("Choose from SteamGridDB…", () => viewModel.ChangeCoverFromSteamGridDb(single)));
+                coverMenu.Items.Add(CreateMenuItem("From file…", () => viewModel.ChangeCoverFromFile(single)));
+                coverMenu.Items.Add(CreateMenuItem("From web address…", () => viewModel.ChangeCoverFromUrl(single)));
+                coverMenu.Items.Add(CreateMenuItem("Reset to automatic", () => viewModel.ResetCover(single), single.HasCoverOverride));
+                items.Add(coverMenu);
                 items.Add(CreateMenuItem("Copy GG.deals Link", () => viewModel.CopyLink(single), single.HasGGDealsUrl));
                 if (single.IsPotentialMatch)
                 {

@@ -28,6 +28,8 @@ A Playnite extension that shows your wishlist with live GG.deals prices in a nat
   - Mark games as favourites (★).
   - Add them to local collections, or remove them.
   - Copy GG.deals links.
+  - **Change Cover** for a single game: pick from SteamGridDB, choose an image file, or paste a web address. Reset returns to automatic covers.
+- Automatic covers: your Playnite cover for owned games, then Steam's portrait art, then Steam's header image. With an optional free SteamGridDB API key (extension settings), games Steam has no artwork for are filled in from SteamGridDB.
 - Playnite library matching. The extension checks the Steam App ID first, then a store link, then an exact title:
   - Similar titles are only suggested as possible matches. They never count as owned until you confirm them.
   - "Owned" means the game is anywhere in your Playnite library, installed or not.
@@ -88,8 +90,9 @@ tools/PreviewApp/             renders the real views with fake data to PNG files
 The extension's data files live in its Playnite user-data folder:
 
 - `cache.json`: the wishlist, prices, rate-limit usage and the last error.
-- `state.json`: favourites, collections, ownership decisions and UI state.
+- `state.json`: favourites, collections, ownership decisions, custom covers and UI state.
 - `covers/`: the image cache.
+- `steamgriddb.json`: cached SteamGridDB lookups.
 
 Both JSON files carry a `DataVersion`. A corrupt file is quarantined and never crashes Playnite. A file from a newer version is backed up before it is replaced.
 

@@ -861,6 +861,68 @@ namespace GGDealsWishlist.ViewModels
             }
         }
 
+        /// <summary>Lets the user pick a cover image from disk for one game.</summary>
+        public void ChangeCoverFromFile(WishlistItemViewModel item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            var path = host.PickImageFile();
+            if (!string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
+            {
+                service.SetCoverOverride(item.Key, path);
+            }
+        }
+
+        /// <summary>Lets the user browse SteamGridDB covers for one game in a thumbnail dialog.</summary>
+        public void ChangeCoverFromSteamGridDb(WishlistItemViewModel item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            var url = host.PickSteamGridDbCover(item.Item.Entry?.SteamAppId, item.Title);
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                service.SetCoverOverride(item.Key, url);
+            }
+        }
+
+        /// <summary>Lets the user paste an image web address as the cover for one game.</summary>
+        public void ChangeCoverFromUrl(WishlistItemViewModel item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            var url = host.PromptText("Web address of the cover image (http or https):", "Change cover", item.HasCoverOverride ? item.Item.CoverOverride : string.Empty);
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return;
+            }
+
+            if (Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp))
+            {
+                service.SetCoverOverride(item.Key, uri.AbsoluteUri);
+            }
+            else
+            {
+                Log.Warn("Ignored a cover address that is not a web address.");
+            }
+        }
+
+        public void ResetCover(WishlistItemViewModel item)
+        {
+            if (item != null)
+            {
+                service.SetCoverOverride(item.Key, null);
+            }
+        }
+
         public string DescribeCollections(IEnumerable<string> ids)
         {
             var names = ids.Select(id => collections.FirstOrDefault(c => c.Id == id))

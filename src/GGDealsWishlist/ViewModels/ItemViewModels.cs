@@ -41,6 +41,12 @@ namespace GGDealsWishlist.ViewModels
 
         bool Confirm(string message, string caption);
 
+        /// <summary>Asks the user for an image file; null when cancelled.</summary>
+        string PickImageFile();
+
+        /// <summary>Shows the SteamGridDB thumbnail picker; returns the chosen image URL, or null when cancelled.</summary>
+        string PickSteamGridDbCover(long? steamAppId, string title);
+
         void ShowCollectionsManager();
     }
 
@@ -351,8 +357,10 @@ namespace GGDealsWishlist.ViewModels
         // ---------------------------------------------------------------- artwork
 
         /// <summary>
-        /// Playnite artwork for reliable matches; otherwise Steam's cover for Steam apps (wishlist games are usually
-        /// not in the library, so this is the normal case); otherwise the placeholder.
+        /// Playnite artwork for reliable matches; otherwise Steam's portrait cover for Steam apps (wishlist games are
+        /// usually not in the library, so this is the normal case), then Steam's landscape header (cropped to fit, since
+        /// many apps have no portrait art), then SteamGridDB when the user has set a key; otherwise the placeholder.
+        /// The loader tries these in order.
         /// </summary>
         public string CoverSource
         {
@@ -364,9 +372,11 @@ namespace GGDealsWishlist.ViewModels
                 }
 
                 var appId = item.Entry?.SteamAppId;
-                return appId.HasValue
-                    ? string.Format(CultureInfo.InvariantCulture, SteamArtworkTemplate, appId.Value)
-                    : null;
+                return CoverSources.Join(
+                    item.CoverOverride,
+                    appId.HasValue ? string.Format(CultureInfo.InvariantCulture, SteamArtworkTemplate, appId.Value) : null,
+                    appId.HasValue ? string.Format(CultureInfo.InvariantCulture, SteamCapsuleTemplate, appId.Value) : null,
+                    CoverSources.SteamGridDb(true, appId, Title));
             }
         }
 
@@ -381,9 +391,10 @@ namespace GGDealsWishlist.ViewModels
                 }
 
                 var appId = item.Entry?.SteamAppId;
-                return appId.HasValue
-                    ? string.Format(CultureInfo.InvariantCulture, SteamCapsuleTemplate, appId.Value)
-                    : null;
+                return CoverSources.Join(
+                    item.CoverOverride,
+                    appId.HasValue ? string.Format(CultureInfo.InvariantCulture, SteamCapsuleTemplate, appId.Value) : null,
+                    CoverSources.SteamGridDb(false, appId, Title));
             }
         }
 
@@ -615,6 +626,8 @@ namespace GGDealsWishlist.ViewModels
         }
 
         public string LibraryGameName => item.IsOwned ? item.Match.Game.Name : null;
+
+        public bool HasCoverOverride => !string.IsNullOrWhiteSpace(item.CoverOverride);
 
         public bool HasMatchOverride => item.Match != null && (item.Match.Kind == MatchKind.UserConfirmed || item.Match.Kind == MatchKind.UserRejected);
 

@@ -818,6 +818,25 @@ namespace GGDealsWishlist.Services
             Rebuild();
         }
 
+        /// <param name="value">File path or web address of the chosen cover, or null to go back to automatic covers.</param>
+        public void SetCoverOverride(string key, string value)
+        {
+            lock (sync)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    state.CoverOverrides.Remove(key);
+                }
+                else
+                {
+                    state.CoverOverrides[key] = value.Trim();
+                }
+            }
+
+            ScheduleStateSave();
+            Rebuild();
+        }
+
         public void SaveUiState(UiState ui)
         {
             if (ui == null)
@@ -924,6 +943,7 @@ namespace GGDealsWishlist.Services
                             matchCache.TryGetValue(entry.Key, out var match);
                             state.Memberships.TryGetValue(entry.Key, out var memberships);
                             var resolved = WishlistItemFactory.Create(entry, PriceFor(entry), match, favourites.Contains(entry.Key), memberships, opts, now, staleAfter);
+                            resolved.CoverOverride = state.CoverOverrides.TryGetValue(entry.Key, out var customCover) ? customCover : null;
                             resolved.PriceHistory = entry.PriceKey.HasValue ? history.Get(entry.PriceKey.Value.ToString())?.Snapshot() : null;
                             built.Add(resolved);
                         }

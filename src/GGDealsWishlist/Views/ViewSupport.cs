@@ -14,6 +14,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using GGDealsWishlist.Infrastructure;
+using GGDealsWishlist.Services;
 using GGDealsWishlist.Settings;
 
 namespace GGDealsWishlist.Views
@@ -104,6 +105,7 @@ namespace GGDealsWishlist.Views
     public static class CoverImage
     {
         private const int MemoryCacheCapacity = 400;
+        private static readonly TimeSpan MissLifetime = TimeSpan.FromDays(7);
 
         private static readonly object Sync = new object();
         private static readonly Dictionary<string, LinkedListNode<KeyValuePair<string, ImageSource>>> CacheIndex = new Dictionary<string, LinkedListNode<KeyValuePair<string, ImageSource>>>();
@@ -120,6 +122,9 @@ namespace GGDealsWishlist.Views
 
         /// <summary>Folder for downloaded remote artwork. Remote images are not cached on disk when null.</summary>
         public static string DiskCacheDirectory { get; set; }
+
+        /// <summary>Resolves a deferred SteamGridDB candidate (portrait?, Steam app id, title) to an image URL, or null.</summary>
+        public static Func<bool, long?, string, Task<string>> GridResolver { get; set; }
 
         public static string GetSource(DependencyObject obj) => (string)obj.GetValue(SourceProperty);
 
@@ -139,7 +144,8 @@ namespace GGDealsWishlist.Views
             var source = e.NewValue as string;
             image.Tag = source;
             image.Source = null;
-            if (string.IsNullOrWhiteSpace(source))
+            var candidates = CoverSources.Split(source);
+            if (candidates.Count == 0)
             {
                 return;
             }
@@ -155,7 +161,7 @@ namespace GGDealsWishlist.Views
 
             lock (Sync)
             {
-                if (Failed.Contains(source))
+                if (candidates.All(Failed.Contains))
                 {
                     return;
                 }
@@ -163,7 +169,7 @@ namespace GGDealsWishlist.Views
 
             Task.Run(async () =>
             {
-                var bitmap = await LoadAsync(source, width).ConfigureAwait(false);
+                var bitmap = await LoadAsync(candidates, width).ConfigureAwait(false);
                 if (bitmap == null)
                 {
                     return;
@@ -181,56 +187,107 @@ namespace GGDealsWishlist.Views
             });
         }
 
-        private static async Task<ImageSource> LoadAsync(string source, int width)
+        /// <summary>Tries each candidate in order and returns the first one that downloads and decodes.</summary>
+        private static async Task<ImageSource> LoadAsync(IReadOnlyList<string> candidates, int width)
         {
-            try
+            foreach (var candidate in candidates)
             {
-                byte[] bytes;
-                if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || source.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                lock (Sync)
                 {
-                    bytes = await LoadRemoteAsync(source).ConfigureAwait(false);
-                }
-                else
-                {
-                    bytes = File.Exists(source) ? File.ReadAllBytes(source) : null;
+                    if (Failed.Contains(candidate))
+                    {
+                        continue;
+                    }
                 }
 
-                if (bytes == null || bytes.Length == 0)
+                try
                 {
-                    MarkFailed(source);
+                    var bytes = await LoadBytesAsync(candidate).ConfigureAwait(false);
+                    if (bytes == null || bytes.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    using (var stream = new MemoryStream(bytes))
+                    {
+                        var bitmap = new BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                        bitmap.DecodePixelWidth = width;
+                        bitmap.StreamSource = stream;
+                        bitmap.EndInit();
+                        bitmap.Freeze();
+                        return bitmap;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Log.Debug("Cover could not be loaded (" + e.GetType().Name + ")");
+                    MarkFailed(candidate);
+                }
+            }
+
+            return null;
+        }
+
+        private static async Task<byte[]> LoadBytesAsync(string candidate)
+        {
+            if (CoverSources.TryParseSteamGridDb(candidate, out var portrait, out var appId, out var title))
+            {
+                var resolver = GridResolver;
+                var url = resolver == null ? null : await resolver(portrait, appId, title).ConfigureAwait(false);
+
+                // Not marked as failed when unresolved: the key may simply not be set yet.
+                if (url == null)
+                {
                     return null;
                 }
 
-                using (var stream = new MemoryStream(bytes))
+                var downloaded = await LoadRemoteAsync(url).ConfigureAwait(false);
+                if (downloaded == null)
                 {
-                    var bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-                    bitmap.DecodePixelWidth = width;
-                    bitmap.StreamSource = stream;
-                    bitmap.EndInit();
-                    bitmap.Freeze();
-                    return bitmap;
+                    MarkFailed(candidate);
                 }
+
+                return downloaded;
             }
-            catch (Exception e)
+
+            byte[] bytes;
+            if (candidate.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || candidate.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                Log.Debug("Cover could not be loaded (" + e.GetType().Name + ")");
-                MarkFailed(source);
-                return null;
+                bytes = await LoadRemoteAsync(candidate).ConfigureAwait(false);
             }
+            else
+            {
+                bytes = File.Exists(candidate) ? File.ReadAllBytes(candidate) : null;
+            }
+
+            if (bytes == null || bytes.Length == 0)
+            {
+                MarkFailed(candidate);
+            }
+
+            return bytes;
         }
 
         private static async Task<byte[]> LoadRemoteAsync(string url)
         {
             string diskPath = null;
+            string missPath = null;
             if (!string.IsNullOrEmpty(DiskCacheDirectory))
             {
                 diskPath = Path.Combine(DiskCacheDirectory, Hash(url) + ".img");
+                missPath = Path.Combine(DiskCacheDirectory, Hash(url) + ".miss");
                 if (File.Exists(diskPath))
                 {
                     return File.ReadAllBytes(diskPath);
+                }
+
+                // Steam has no art for many apps; remember the 404 for a week instead of re-asking on every start.
+                if (File.Exists(missPath) && DateTime.UtcNow - File.GetLastWriteTimeUtc(missPath) < MissLifetime)
+                {
+                    return null;
                 }
             }
 
@@ -241,6 +298,12 @@ namespace GGDealsWishlist.Views
                 {
                     if (!response.IsSuccessStatusCode)
                     {
+                        if (response.StatusCode == System.Net.HttpStatusCode.NotFound && missPath != null)
+                        {
+                            Directory.CreateDirectory(DiskCacheDirectory);
+                            File.WriteAllBytes(missPath, new byte[0]);
+                        }
+
                         return null;
                     }
 

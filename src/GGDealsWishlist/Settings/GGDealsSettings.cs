@@ -80,6 +80,9 @@ namespace GGDealsWishlist.Settings
 
         public string AccentColor { get; set; } = DefaultAccentColor;
 
+        /// <summary>Optional SteamGridDB API key; when set, it supplies covers for games Steam has no artwork for.</summary>
+        public string SteamGridDbApiKey { get; set; } = string.Empty;
+
         // Header information
         public bool ShowGameCount { get; set; } = true;
 

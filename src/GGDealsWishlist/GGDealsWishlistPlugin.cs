@@ -55,8 +55,10 @@ namespace GGDealsWishlist
 
             var dataDirectory = GetPluginUserDataPath();
             CoverImage.DiskCacheDirectory = Path.Combine(dataDirectory, "covers");
+            var gridClient = new SteamGridDbClient(() => settings.SteamGridDbApiKey, Path.Combine(dataDirectory, "steamgriddb.json"));
+            CoverImage.GridResolver = gridClient.FindGridUrlAsync;
 
-            host = new PlayniteHost(this, api, settings, () => service);
+            host = new PlayniteHost(this, api, settings, () => service) { GridClient = gridClient };
             host.RegisterStoredKey();
 
             var rateLimits = new RateLimitTracker();

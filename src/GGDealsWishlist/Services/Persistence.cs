@@ -79,10 +79,14 @@ namespace GGDealsWishlist.Services
         /// <summary>Wishlist item key → confirmed Playnite game id, or "none" for a rejected match.</summary>
         public Dictionary<string, string> MatchOverrides { get; set; } = new Dictionary<string, string>();
 
+        /// <summary>Wishlist item key → user-chosen cover (local file path or web address); wins over automatic covers.</summary>
+        public Dictionary<string, string> CoverOverrides { get; set; } = new Dictionary<string, string>();
+
         public UiState Ui { get; set; } = new UiState();
 
         public void Normalize()
         {
+            CoverOverrides = CoverOverrides ?? new Dictionary<string, string>();
             Favourites = Favourites ?? new List<string>();
             Collections = Collections ?? new List<WishlistCollection>();
             Memberships = Memberships ?? new Dictionary<string, List<string>>();

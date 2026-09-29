@@ -334,6 +334,9 @@ namespace GGDealsWishlist.Models
 
         public bool IsFavourite { get; set; }
 
+        /// <summary>Cover the user picked for this game (file path or web address); null when using automatic covers.</summary>
+        public string CoverOverride { get; set; }
+
         public IReadOnlyList<string> CollectionIds { get; set; } = new string[0];
 
         public decimal? DisplayPrice { get; set; }

@@ -203,7 +203,17 @@
             </Grid>
             <TextBlock Text="{Binding AccentValidationText}" Foreground="{DynamicResource GG.Error}" Visibility="{Binding AccentValidationText, Converter={StaticResource Vis}}" />
             <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,6"
-                       Text="Cover art comes from Steam for Steam games. Games already in your Playnite library use their Playnite cover; games without either show a placeholder." />
+                       Text="Cover art comes from Steam for Steam games. Games already in your Playnite library use their Playnite cover. Games Steam has no artwork for can use SteamGridDB if you add a key below; otherwise they show a placeholder." />
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" MaxWidth="360" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Style="{StaticResource Label}" Text="SteamGridDB key" />
+                <TextBox Grid.Column="1" Text="{Binding Settings.SteamGridDbApiKey, UpdateSourceTrigger=PropertyChanged}" Padding="3" AutomationProperties.Name="SteamGridDB API key" />
+            </Grid>
+            <TextBlock Style="{StaticResource Hint}"
+                       Text="Optional. Get a free key at steamgriddb.com/profile/preferences/api. It is stored unencrypted in the extension settings. Newly found covers appear after restarting Playnite." />
 
             <!-- ============================== Information ============================== -->
             <DockPanel Margin="0,22,0,8">

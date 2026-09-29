@@ -218,6 +218,44 @@ namespace GGDealsWishlist
             return result != null && result.Result ? result.SelectedString?.Trim() : null;
         }
 
+        public string PickImageFile() => api.Dialogs.SelectFile("Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif");
+
+        /// <summary>Set by the plugin; the picker needs it to search SteamGridDB.</summary>
+        public SteamGridDbClient GridClient { get; set; }
+
+        public string PickSteamGridDbCover(long? steamAppId, string title)
+        {
+            if (GridClient == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var viewModel = new CoverPickerViewModel(GridClient, steamAppId, title);
+                var window = api.Dialogs.CreateWindow(new WindowCreationOptions
+                {
+                    ShowCloseButton = true,
+                    ShowMaximizeButton = false,
+                    ShowMinimizeButton = false
+                });
+                window.Title = "GG.deals Wishlist – Change cover";
+                window.Width = 720;
+                window.Height = 620;
+                window.Owner = api.Dialogs.GetCurrentAppWindow();
+                window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                window.Content = new CoverPickerView(viewModel, settings.Theme);
+                viewModel.CloseRequested += (s, e) => window.Close();
+                window.ShowDialog();
+                return viewModel.ChosenUrl;
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "Could not open the cover picker");
+                return null;
+            }
+        }
+
         public bool Confirm(string message, string caption)
         {
             return api.Dialogs.ShowMessage(message, caption, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;

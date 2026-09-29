@@ -705,6 +705,30 @@ namespace GGDealsWishlist.Tests
         }
 
         [Fact]
+        public async Task Cover_override_is_applied_reset_and_survives_restart()
+        {
+            using (var h = new Harness())
+            {
+                await h.Service.InitializeAsync();
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                Assert.Null(h.Service.Items[0].CoverOverride);
+
+                h.Service.SetCoverOverride("steam:app:1", "  https://example.com/cover.png ");
+                Assert.Equal("https://example.com/cover.png", h.Service.Items[0].CoverOverride);
+                h.Service.Shutdown();
+
+                h.ManualEnabled = false;
+                var restarted = h.Create();
+                await restarted.InitializeAsync();
+                Assert.Equal("https://example.com/cover.png", restarted.Items[0].CoverOverride);
+
+                restarted.SetCoverOverride("steam:app:1", null);
+                Assert.Null(restarted.Items[0].CoverOverride);
+                restarted.Dispose();
+            }
+        }
+
+        [Fact]
         public async Task Large_wishlist_refreshes_in_batches()
         {
             using (var h = new Harness())
