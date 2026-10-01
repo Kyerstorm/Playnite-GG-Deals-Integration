@@ -70,6 +70,11 @@ namespace PreviewApp
                     vm.OpenDetails(vm.Items.FirstOrDefault(i => i.IsPotentialMatch) ?? vm.Items.First()));
                 s.RenderSidebar(output, "08-search-noresults-340", 340, 500, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm => vm.SearchText = "zzzz");
                 s.RenderSidebar(output, "09-filter-historical-340", 340, 800, ViewMode.Compact, ThemeMode.Dark, dark, vm => vm.Quick = QuickFilter.HistoricalLow);
+                s.RenderSidebar(output, "35-noresults-search-and-filter-340", 340, 400, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm =>
+                {
+                    vm.Quick = QuickFilter.HistoricalLow;
+                    vm.SearchText = "zzzz";
+                });
 
                 // Unable to refresh with cached data.
                 s.Clock.Advance(TimeSpan.FromHours(3));

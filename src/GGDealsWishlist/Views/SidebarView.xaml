@@ -17,6 +17,7 @@
         <v:AllTrueToVisibilityConverter x:Key="AllVis" />
         <v:EqualsConverter x:Key="Eq" />
         <v:InSetToVisibilityConverter x:Key="InSet" />
+        <v:UpperCaseConverter x:Key="Upper" />
 
         <Style x:Key="GG.Muted" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
@@ -247,6 +248,19 @@
         <ItemsPanelTemplate x:Key="GG.WrapPanelTemplate">
             <WrapPanel />
         </ItemsPanelTemplate>
+
+        <!-- One button of an empty/error card. The view model decides which buttons exist; primary ones use the accent colour. -->
+        <DataTemplate x:Key="StateActionTemplate" DataType="{x:Type vm:StateAction}">
+            <Grid>
+                <!-- CommandParameter must come before Command, or CanExecute first runs with null and the button stays dim until the next requery. -->
+                <Button Style="{StaticResource GG.ActionButton}" Content="{Binding Label, Converter={StaticResource Upper}}"
+                        CommandParameter="{Binding}" Command="{Binding DataContext.RunStateActionCommand, ElementName=Root}"
+                        Visibility="{Binding IsPrimary, Converter={StaticResource Vis}}" />
+                <Button Style="{StaticResource GG.SecondaryButton}" Content="{Binding Label, Converter={StaticResource Upper}}"
+                        CommandParameter="{Binding}" Command="{Binding DataContext.RunStateActionCommand, ElementName=Root}"
+                        Visibility="{Binding IsPrimary, Converter={StaticResource InvVis}}" />
+            </Grid>
+        </DataTemplate>
 
         <!-- Recorded prices: only what this extension saw on its own refreshes (the GG.deals API has no history). -->
         <DataTemplate x:Key="PriceHistorySectionTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
@@ -1017,8 +1031,8 @@
 
             <!-- No results -->
             <StackPanel Margin="16,24,16,0" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=NoResults}">
-                <TextBlock Text="No games match your search and filters." TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
-                <Button Style="{StaticResource GG.SecondaryButton}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" HorizontalAlignment="Center" Margin="0,10,0,0" />
+                <TextBlock Text="{Binding StateMessage}" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,12" />
+                <ItemsControl ItemsSource="{Binding StateActions}" ItemTemplate="{StaticResource StateActionTemplate}" HorizontalAlignment="Center" MinWidth="170" />
             </StackPanel>
 
             <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter='NeedsApiKey,WishlistUnavailable,EmptyWishlist,Error'}">
@@ -1052,8 +1066,7 @@
                             <TextBlock TextWrapping="Wrap" Margin="0,-6,0,12" Foreground="{DynamicResource GG.TextMuted}"
                                        Visibility="{Binding IsSteamSource, Converter={StaticResource InvVis}}"
                                        Text="Meanwhile you can show GG.deals prices for your public Steam wishlist, or for a manual list of games. Choose one in the extension settings (Wishlist source)." />
-                            <Button Style="{StaticResource GG.ActionButton}" Content="OPEN GG.DEALS" Command="{Binding OpenWishlistCommand}" />
-                            <Button Style="{StaticResource GG.SecondaryButton}" Content="WISHLIST SETTINGS" Command="{Binding OpenSettingsCommand}" />
+                            <ItemsControl ItemsSource="{Binding StateActions}" ItemTemplate="{StaticResource StateActionTemplate}" />
                         </StackPanel>
                     </Border>
 
@@ -1061,7 +1074,7 @@
                     <Border Style="{StaticResource GG.Card}" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=EmptyWishlist}">
                         <StackPanel>
                             <TextBlock Text="{Binding EmptyMessage}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,0,12" />
-                            <Button Style="{StaticResource GG.ActionButton}" Content="OPEN GG.DEALS" Command="{Binding OpenWishlistCommand}" />
+                            <ItemsControl ItemsSource="{Binding StateActions}" ItemTemplate="{StaticResource StateActionTemplate}" />
                         </StackPanel>
                     </Border>
 
@@ -1073,9 +1086,7 @@
                             <TextBlock Text="{Binding WarningMessage}" TextWrapping="Wrap" />
                             <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding LastSuccessText}" TextWrapping="Wrap" Margin="0,6,0,0"
                                        Visibility="{Binding LastSuccessText, Converter={StaticResource Vis}}" />
-                            <Button Style="{StaticResource GG.ActionButton}" Content="RETRY" Command="{Binding RetryCommand}" Margin="0,12,0,6"
-                                    Visibility="{Binding CanRetry, Converter={StaticResource Vis}}" />
-                            <Button Style="{StaticResource GG.SecondaryButton}" Content="API SETTINGS" Command="{Binding OpenSettingsCommand}" />
+                            <ItemsControl ItemsSource="{Binding StateActions}" ItemTemplate="{StaticResource StateActionTemplate}" Margin="0,12,0,0" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

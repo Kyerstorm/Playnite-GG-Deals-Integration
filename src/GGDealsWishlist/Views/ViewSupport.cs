@@ -20,6 +20,17 @@ using GGDealsWishlist.Settings;
 
 namespace GGDealsWishlist.Views
 {
+    /// <summary>Upper-cases a button label, matching the existing ALL-CAPS action buttons.</summary>
+    public sealed class UpperCaseConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return (value as string)?.ToUpper(culture);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+    }
+
     /// <summary>bool / non-empty string / non-null → Visible. Set Invert to flip.</summary>
     public sealed class BoolToVisibilityConverter : IValueConverter
     {
