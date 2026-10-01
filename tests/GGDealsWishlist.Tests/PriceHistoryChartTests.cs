@@ -102,5 +102,64 @@ namespace GGDealsWishlist.Tests
 
             Assert.Equal(new[] { 0.0, 0.5, 1.0 }, Xs(chart.Markers));
         }
+
+        [Fact]
+        public void Each_marker_keeps_its_price_and_time_for_hover_labels()
+        {
+            var series = Series(Day0.AddDays(4), P(0, 20m, null), P(1, 10m, null), P(2, 15m, null));
+
+            var chart = PriceHistoryChart.Build(series, PricePreference.Retail);
+
+            Assert.Equal(new[] { 20m, 10m, 15m }, chart.Prices.ToArray());
+            Assert.Equal(new[] { Day0, Day0.AddDays(1), Day0.AddDays(2) }, chart.Times.ToArray());
+        }
+
+        [Fact]
+        public void The_low_marker_is_the_cheapest_price_and_the_latest_one_on_a_tie()
+        {
+            var distinct = PriceHistoryChart.Build(Series(Day0.AddDays(4), P(0, 20m, null), P(1, 10m, null), P(2, 15m, null)), PricePreference.Retail);
+            var tied = PriceHistoryChart.Build(Series(Day0.AddDays(4), P(0, 10m, null), P(1, 15m, null), P(2, 10m, null)), PricePreference.Retail);
+
+            Assert.Equal(1, distinct.LowIndex);
+            Assert.Equal(2, tied.LowIndex);
+            Assert.Equal(-1, PriceHistoryChart.Empty.LowIndex);
+        }
+
+        [Fact]
+        public void Hovering_returns_the_price_in_effect_at_that_point_in_time()
+        {
+            // Markers at x = 0, 0.25, 0.5; the last price is held to x = 1.
+            var chart = PriceHistoryChart.Build(Series(Day0.AddDays(4), P(0, 20m, null), P(1, 10m, null), P(2, 15m, null)), PricePreference.Retail);
+
+            Assert.Equal(0, chart.StepIndexAt(0));
+            Assert.Equal(0, chart.StepIndexAt(0.24));
+            Assert.Equal(1, chart.StepIndexAt(0.25));
+            Assert.Equal(1, chart.StepIndexAt(0.49));
+            Assert.Equal(2, chart.StepIndexAt(0.5));
+            Assert.Equal(2, chart.StepIndexAt(1));
+        }
+
+        [Fact]
+        public void Hover_positions_outside_the_chart_are_clamped_and_an_empty_chart_has_no_step()
+        {
+            var chart = PriceHistoryChart.Build(Series(Day0.AddDays(4), P(0, 20m, null), P(1, 10m, null)), PricePreference.Retail);
+
+            Assert.Equal(0, chart.StepIndexAt(-3));
+            Assert.Equal(1, chart.StepIndexAt(7));
+            Assert.Equal(-1, PriceHistoryChart.Empty.StepIndexAt(0.5));
+        }
+
+        [Fact]
+        public void A_series_can_be_charted_for_both_store_types_only_when_each_has_a_line()
+        {
+            var both = Series(Day0.AddDays(3), P(0, 20m, 15m), P(1, 10m, 12m));
+            var retailOnly = Series(Day0.AddDays(3), P(0, 20m, null), P(1, 10m, null));
+            var flatKeyshop = Series(Day0.AddDays(3), P(0, 20m, 12m), P(1, 10m, 12m));
+
+            Assert.True(PriceHistoryChart.CanCompare(both));
+            Assert.False(PriceHistoryChart.CanCompare(retailOnly));
+            Assert.True(PriceHistoryChart.CanCompare(flatKeyshop));
+            Assert.False(PriceHistoryChart.CanCompare(null));
+        }
     }
 }

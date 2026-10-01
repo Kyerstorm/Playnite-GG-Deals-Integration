@@ -35,6 +35,46 @@ namespace GGDealsWishlist.Services
         {
             Line = None;
             Markers = None;
+            Prices = new decimal[0];
+            Times = new DateTime[0];
+            LowIndex = -1;
+        }
+
+        /// <summary>The recorded price behind each entry of <see cref="Markers"/>.</summary>
+        public IReadOnlyList<decimal> Prices { get; private set; }
+
+        /// <summary>When each entry of <see cref="Markers"/> was recorded (UTC).</summary>
+        public IReadOnlyList<DateTime> Times { get; private set; }
+
+        /// <summary>Index of the cheapest recorded price (the latest one on a tie), or -1 without a line.</summary>
+        public int LowIndex { get; private set; }
+
+        /// <summary>
+        /// The marker whose price is in effect at <paramref name="x"/> (0..1, clamped). The chart is a step line, so
+        /// hovering between two markers reports the earlier one: the price that was being held.
+        /// </summary>
+        public int StepIndexAt(double x)
+        {
+            if (Markers.Count == 0)
+            {
+                return -1;
+            }
+
+            for (var i = Markers.Count - 1; i > 0; i--)
+            {
+                if (Markers[i].X <= x)
+                {
+                    return i;
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>True when both the retail and the keyshop prices have their own line, so the two can be compared.</summary>
+        public static bool CanCompare(PriceSeries series)
+        {
+            return Build(series, PricePreference.Retail).HasHistory && Build(series, PricePreference.Keyshop).HasHistory;
         }
 
         /// <summary>The step outline: each price is held until the next change, then the line runs on to the latest check.</summary>
@@ -80,10 +120,15 @@ namespace GGDealsWishlist.Services
 
             var min = prices[0];
             var max = prices[0];
-            foreach (var price in prices)
+            var lowIndex = 0;
+            for (var i = 0; i < prices.Count; i++)
             {
-                min = Math.Min(min, price);
-                max = Math.Max(max, price);
+                max = Math.Max(max, prices[i]);
+                if (prices[i] <= min)
+                {
+                    min = prices[i];
+                    lowIndex = i;
+                }
             }
 
             var from = times[0];
@@ -116,6 +161,9 @@ namespace GGDealsWishlist.Services
             {
                 Line = line,
                 Markers = markers,
+                Prices = prices,
+                Times = times,
+                LowIndex = lowIndex,
                 Min = min,
                 Max = max,
                 FromUtc = from,

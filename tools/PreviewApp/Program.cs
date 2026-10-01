@@ -101,6 +101,19 @@ namespace PreviewApp
 
                 s.RenderSidebar(output, "20-cover-history-360", 360, 800, ViewMode.CoverInfo, ThemeMode.Dark, dark);
                 s.RenderSidebar(output, "21-cover-expanded-history-360", 360, 1000, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First(i => i.Title.StartsWith("Hollow"))));
+                s.RenderSidebar(output, "31-chart-hover-360", 360, 1000, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm =>
+                {
+                    var item = vm.Items.First(i => i.Title.StartsWith("Hollow"));
+                    vm.ToggleExpanded(item);
+                    item.HoverAt(290);
+                });
+                s.RenderSidebar(output, "32-chart-keyshops-360", 360, 1000, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm =>
+                {
+                    var item = vm.Items.First(i => i.Title.StartsWith("Hollow"));
+                    vm.ToggleExpanded(item);
+                    item.ChartSource = PricePreference.Keyshop;
+                    item.HoverAt(60);
+                });
                 s.RenderSidebar(output, "22-grid-dark-360", 360, 900, ViewMode.Grid, ThemeMode.Dark, dark);
                 s.RenderSidebar(output, "23-grid-expanded-360", 360, 1100, ViewMode.Grid, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First(i => i.Title.StartsWith("Hollow"))));
                 s.RenderSidebar(output, "24-grid-wide-680", 680, 900, ViewMode.Grid, ThemeMode.Dark, dark);

@@ -71,6 +71,23 @@ namespace GGDealsWishlist.Views
             viewModel.SetupApiKey = SetupKeyBox.Password;
         }
 
+        // The chart canvas is a fixed 380 x 70 inside a Viewbox, and GetPosition already undoes the Viewbox scaling.
+        private void OnChartMouseMove(object sender, MouseEventArgs e)
+        {
+            if (sender is FrameworkElement chart && chart.DataContext is WishlistItemViewModel item)
+            {
+                item.HoverAt(e.GetPosition(chart).X);
+            }
+        }
+
+        private void OnChartMouseLeave(object sender, MouseEventArgs e)
+        {
+            if (sender is FrameworkElement chart && chart.DataContext is WishlistItemViewModel item)
+            {
+                item.ClearHover();
+            }
+        }
+
         // =========================================================================================
         // Item interaction
         // =========================================================================================

@@ -136,6 +136,52 @@
             </Setter>
         </Style>
 
+        <!-- Segmented "Official | Keyshops" switch above the price chart. The selected side is lit by a data trigger. -->
+        <Style x:Key="GG.ChartToggle" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource GG.Border}" BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GG.ChartToggleOfficial" TargetType="Button" BasedOn="{StaticResource GG.ChartToggle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsOfficialChart}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource GG.Text}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="Background" Value="{DynamicResource GG.CardHover}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="GG.ChartToggleKeyshop" TargetType="Button" BasedOn="{StaticResource GG.ChartToggle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsKeyshopChart}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource GG.Text}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="Background" Value="{DynamicResource GG.CardHover}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="GG.QuickTab" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
             <Setter Property="FontSize" Value="11" />
@@ -209,20 +255,44 @@
                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource GG.Muted}" Text="{Binding HistoryRangeText}" Margin="8,0,0,0" />
                     <TextBlock Style="{StaticResource GG.SectionLabel}" Text="PRICE HISTORY" Margin="0,0,0,3" />
                 </DockPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,4" Visibility="{Binding CanCompareChart, Converter={StaticResource Vis}}">
+                    <Button Style="{StaticResource GG.ChartToggleOfficial}" Content="Official" Command="{Binding SetChartSourceCommand}" CommandParameter="Retail"
+                            ToolTip="Chart official store prices" />
+                    <Button Style="{StaticResource GG.ChartToggleKeyshop}" Content="Keyshops" Command="{Binding SetChartSourceCommand}" CommandParameter="Keyshop"
+                            Margin="4,0,0,0" ToolTip="Chart keyshop prices" />
+                </StackPanel>
                 <Border Background="{DynamicResource GG.Background}" CornerRadius="4" Padding="6,6,6,4" Visibility="{Binding HasPriceHistory, Converter={StaticResource Vis}}">
                     <StackPanel>
                         <Viewbox Stretch="Uniform" StretchDirection="Both">
-                            <Canvas Width="380" Height="70">
-                                <Polyline Points="{Binding HistoryLinePoints}" Stroke="{DynamicResource GG.Text}" StrokeThickness="1.8" StrokeLineJoin="Round" />
-                                <Path Data="{Binding HistoryMarkers}" Fill="{Binding Display.AccentBrush}" />
-                            </Canvas>
+                            <Grid Width="380" Height="70">
+                                <Canvas>
+                                    <Polyline Points="{Binding HistoryLinePoints}" Stroke="{DynamicResource GG.Text}" StrokeThickness="1.8" StrokeLineJoin="Round" />
+                                    <Path Data="{Binding HistoryMarkers}" Fill="{Binding Display.AccentBrush}" />
+                                    <!-- Ring around the lowest recorded price -->
+                                    <Ellipse Width="12" Height="12" StrokeThickness="1.6" Stroke="{Binding Display.AccentBrush}" IsHitTestVisible="False"
+                                             Canvas.Left="{Binding LowRingLeft}" Canvas.Top="{Binding LowRingTop}"
+                                             Visibility="{Binding HasLowMarker, Converter={StaticResource Vis}}" />
+                                    <!-- Hover guide: the price being held at the pointer -->
+                                    <Line X1="{Binding HoverX}" X2="{Binding HoverX}" Y1="0" Y2="70" Stroke="{DynamicResource GG.TextMuted}" StrokeThickness="1"
+                                          StrokeDashArray="2 2" IsHitTestVisible="False" Visibility="{Binding HasHover, Converter={StaticResource Vis}}" />
+                                    <Ellipse Width="7" Height="7" Fill="{DynamicResource GG.Text}" IsHitTestVisible="False"
+                                             Canvas.Left="{Binding HoverDotLeft}" Canvas.Top="{Binding HoverDotTop}"
+                                             Visibility="{Binding HasHover, Converter={StaticResource Vis}}" />
+                                    <Rectangle Width="380" Height="70" Fill="Transparent" MouseMove="OnChartMouseMove" MouseLeave="OnChartMouseLeave" />
+                                </Canvas>
+                                <Border HorizontalAlignment="{Binding HoverLabelAlignment}" VerticalAlignment="Top" Margin="{Binding HoverLabelMargin}"
+                                        Background="{DynamicResource GG.Card}" BorderBrush="{DynamicResource GG.Border}" BorderThickness="1" CornerRadius="3" Padding="5,1"
+                                        IsHitTestVisible="False" Visibility="{Binding HasHover, Converter={StaticResource Vis}}">
+                                    <TextBlock Text="{Binding HoverText}" FontSize="11" Foreground="{DynamicResource GG.Text}" />
+                                </Border>
+                            </Grid>
                         </Viewbox>
                         <Grid Margin="0,2,0,0">
                             <TextBlock Style="{StaticResource GG.Muted}" FontSize="10.5" HorizontalAlignment="Left">
                                 <Run Text="High" /> <Run Text="{Binding HistoryMaxText, Mode=OneWay}" />
                             </TextBlock>
                             <TextBlock Style="{StaticResource GG.Muted}" FontSize="10.5" HorizontalAlignment="Right">
-                                <Run Text="Low" /> <Run Text="{Binding HistoryMinText, Mode=OneWay}" />
+                                <Run Text="Low" /> <Run Text="{Binding HistoryMinText, Mode=OneWay}" /><Run Text="{Binding HistoryLowWhenText, Mode=OneWay}" />
                             </TextBlock>
                         </Grid>
                     </StackPanel>
