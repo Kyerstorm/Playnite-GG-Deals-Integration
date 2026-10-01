@@ -12,6 +12,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using GGDealsWishlist.Infrastructure;
 using GGDealsWishlist.Services;
@@ -143,6 +144,9 @@ namespace GGDealsWishlist.Views
 
             var source = e.NewValue as string;
             image.Tag = source;
+
+            // A recycled container may still be pulsing or fading from its previous cover.
+            image.BeginAnimation(UIElement.OpacityProperty, null);
             image.Source = null;
             var candidates = CoverSources.Split(source);
             if (candidates.Count == 0)
@@ -155,6 +159,7 @@ namespace GGDealsWishlist.Views
             var cached = TryGetCached(key);
             if (cached != null)
             {
+                // Already decoded: show it at once so scrolling back never flickers.
                 image.Source = cached;
                 return;
             }
@@ -167,24 +172,76 @@ namespace GGDealsWishlist.Views
                 }
             }
 
+            ShowSkeleton(image);
             Task.Run(async () =>
             {
                 var bitmap = await LoadAsync(candidates, width).ConfigureAwait(false);
-                if (bitmap == null)
+                if (bitmap != null)
                 {
-                    return;
+                    AddCached(key, bitmap);
                 }
 
-                AddCached(key, bitmap);
                 _ = image.Dispatcher.BeginInvoke(new Action(() =>
                 {
                     // Containers are recycled while scrolling: only apply if the image still wants this source.
-                    if (Equals(image.Tag, source))
+                    if (!Equals(image.Tag, source))
                     {
-                        image.Source = bitmap;
+                        return;
                     }
+
+                    if (bitmap == null)
+                    {
+                        // No cover from any source: drop the skeleton and leave the card's own placeholder.
+                        image.BeginAnimation(UIElement.OpacityProperty, null);
+                        image.Source = null;
+                        return;
+                    }
+
+                    image.Source = bitmap;
+                    FadeIn(image);
                 }));
             });
+        }
+
+        /// <summary>A soft, theme-neutral grey block (translucent, so it reads on both dark and light cards).</summary>
+        private static readonly ImageSource Skeleton = CreateSkeleton();
+
+        private static ImageSource CreateSkeleton()
+        {
+            var brush = new LinearGradientBrush(Color.FromArgb(0x26, 0x80, 0x80, 0x80), Color.FromArgb(0x40, 0x80, 0x80, 0x80), 45);
+            brush.Freeze();
+            var drawing = new GeometryDrawing(brush, null, new RectangleGeometry(new Rect(0, 0, 2, 3)));
+            drawing.Freeze();
+            var image = new DrawingImage(drawing);
+            image.Freeze();
+            return image;
+        }
+
+        /// <summary>Whether the user's system allows UI animations (Windows "Show animations" / remote sessions turn this off).</summary>
+        private static bool AnimationsEnabled => SystemParameters.ClientAreaAnimation;
+
+        private static void ShowSkeleton(Image image)
+        {
+            image.Source = Skeleton;
+            if (!AnimationsEnabled)
+            {
+                return;
+            }
+
+            image.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.55, 1, TimeSpan.FromMilliseconds(750))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase()
+            });
+        }
+
+        private static void FadeIn(Image image)
+        {
+            // Replaces the pulse; FillBehavior.Stop hands Opacity back to its normal value when the fade ends.
+            image.BeginAnimation(UIElement.OpacityProperty, AnimationsEnabled
+                ? new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { FillBehavior = FillBehavior.Stop }
+                : null);
         }
 
         /// <summary>Tries each candidate in order and returns the first one that downloads and decodes.</summary>

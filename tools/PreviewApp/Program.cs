@@ -84,6 +84,23 @@ namespace PreviewApp
                     return new GGDealsSettingsView(vm);
                 }, dark);
                 s.RenderControl(output, "12-collections", 560, 420, () => new CollectionsManagerView(new CollectionsManagerViewModel(s.Service, s.Host), ThemeMode.Dark), dark);
+
+                // Covers still downloading: an unroutable address keeps the images in their skeleton state for the whole render.
+                foreach (var themeCase in new[] { Tuple.Create("33-cover-loading-dark", dark), Tuple.Create("34-cover-loading-light", light) })
+                {
+                    s.RenderControl(output, themeCase.Item1, 360, 200, () =>
+                    {
+                        var row = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(16) };
+                        foreach (var n in new[] { 1, 2, 3 })
+                        {
+                            var image = new System.Windows.Controls.Image { Stretch = Stretch.UniformToFill };
+                            CoverImage.SetSource(image, "http://10.255.255.1/cover" + n + ".jpg");
+                            row.Children.Add(new System.Windows.Controls.Border { Width = 96, Height = 144, Margin = new Thickness(0, 0, 12, 0), CornerRadius = new CornerRadius(4), ClipToBounds = true, Child = image });
+                        }
+
+                        return row;
+                    }, themeCase.Item2);
+                }
             }
 
             // Price history: the first scenario has a single recorded price per game ("tracking started").
