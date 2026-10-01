@@ -150,6 +150,49 @@ namespace PreviewApp
             using (var s = Scenario.Create(withKey: false, manual: false))
             {
                 s.RenderSidebar(output, "13-first-run-340", 340, 700, ViewMode.CoverInfo, ThemeMode.Dark, dark);
+
+                // The setup dialog, one frame per step (dark), plus the key step in light.
+                var stages = new[] { "36-wizard-key", "37-wizard-region", "38-wizard-source", "39-wizard-covers", "40-wizard-done" };
+                for (var stage = 0; stage < stages.Length; stage++)
+                {
+                    var target = stage;
+                    s.RenderControl(output, stages[stage], 580, 560, () =>
+                    {
+                        var wizard = new SetupWizardViewModel(
+                            s.Host,
+                            (key, region) => Task.FromResult(new ConnectionTestResult()),
+                            id => Task.FromResult(new WishlistFetchResult { State = WishlistProviderState.Available, Entries = new List<WishlistEntry> { new WishlistEntry(), new WishlistEntry(), new WishlistEntry() } }),
+                            () => { });
+                        if (target > 0)
+                        {
+                            wizard.ApiKey = PreviewKey;
+                            wizard.TestKeyAsync().GetAwaiter().GetResult();
+                            wizard.Next();
+                        }
+
+                        if (target > 1)
+                        {
+                            wizard.Next();
+                            wizard.SteamIdText = "76561198000000000";
+                            wizard.CheckSteamAsync().GetAwaiter().GetResult();
+                        }
+
+                        if (target > 2)
+                        {
+                            wizard.Next();
+                        }
+
+                        if (target > 3)
+                        {
+                            wizard.Next();
+                        }
+
+                        return new SetupWizardView(wizard, ThemeMode.Dark);
+                    }, dark);
+                }
+
+                s.RenderControl(output, "41-wizard-key-light", 580, 560, () =>
+                    new SetupWizardView(new SetupWizardViewModel(s.Host, (key, region) => Task.FromResult(new ConnectionTestResult()), id => Task.FromResult(new WishlistFetchResult()), () => { }), ThemeMode.Light), light);
             }
 
             using (var s = Scenario.Create(withKey: true, manual: false))
@@ -530,6 +573,10 @@ this is not a steam id";
             public bool Confirm(string message, string caption) => false;
 
             public void ShowCollectionsManager()
+            {
+            }
+
+            public void ShowSetupWizard()
             {
             }
         }

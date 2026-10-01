@@ -5,6 +5,7 @@ using System.Net;
 using System.Threading;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using GGDealsWishlist.Api;
 using GGDealsWishlist.Infrastructure;
 using GGDealsWishlist.Providers;
@@ -102,6 +103,14 @@ namespace GGDealsWishlist
 
             // Load cached data in the background, then let the scheduler decide whether a refresh is due.
             service.InitializeAsync().ContinueWith(_ => scheduler.Start(TimeSpan.FromSeconds(15)));
+
+            // First run: offer the setup dialog once. Closing it early is remembered, so it never returns uninvited
+            // (the sidebar, the main menu and the settings page can all reopen it).
+            if (!settings.SetupCompleted && !settings.SetupPromptShown)
+            {
+                host.UpdateSettings(s => s.SetupPromptShown = true);
+                host.Dispatcher.BeginInvoke(new Action(host.ShowSetupWizard), DispatcherPriority.ApplicationIdle);
+            }
         }
 
         public override void OnApplicationStopped(OnApplicationStoppedEventArgs args)
@@ -159,6 +168,12 @@ namespace GGDealsWishlist
                 MenuSection = MenuSection,
                 Description = "Manage collections…",
                 Action = _ => host.ShowCollectionsManager()
+            };
+            yield return new MainMenuItem
+            {
+                MenuSection = MenuSection,
+                Description = "Set up…",
+                Action = _ => host.ShowSetupWizard()
             };
             yield return new MainMenuItem
             {

@@ -277,6 +277,8 @@
 
             <!-- ============================== Advanced ============================== -->
             <TextBlock Style="{StaticResource Section}" Text="Advanced" />
+            <Button Style="{StaticResource Action}" Content="Run setup again…" Command="{Binding RunSetupCommand}" HorizontalAlignment="Left" />
+            <TextBlock Style="{StaticResource Hint}" Text="Opens the step-by-step setup: API key, region, wishlist source and covers." />
             <Button Style="{StaticResource Action}" Content="Clear cached data…" Command="{Binding ClearCacheCommand}" HorizontalAlignment="Left" />
             <TextBlock Style="{StaticResource Hint}" Text="Removes cached wishlist and price data. Favourites, collections and ownership decisions are kept. Recorded price history is kept too." />
             <Button Style="{StaticResource Action}" Content="Clear price history…" Command="{Binding ClearPriceHistoryCommand}" HorizontalAlignment="Left" Margin="0,10,0,0" />

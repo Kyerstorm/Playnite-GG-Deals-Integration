@@ -50,6 +50,7 @@ namespace GGDealsWishlist.Settings
             ClearCacheCommand = new RelayCommand(ClearCache);
             ClearPriceHistoryCommand = new RelayCommand(ClearPriceHistory);
             ManageCollectionsCommand = new RelayCommand(() => host.ShowCollectionsManager());
+            RunSetupCommand = new RelayCommand(() => host.ShowSetupWizard());
             OpenApiInfoCommand = new RelayCommand(() => host.OpenUrl(SidebarViewModel.ApiInfoUrl));
             OpenWishlistCommand = new RelayCommand(() => host.OpenUrl(settings.GGDealsWishlistUrl));
             OpenAttributionCommand = new RelayCommand(() => host.OpenUrl(SidebarViewModel.GGDealsHomeUrl));
@@ -351,6 +352,8 @@ namespace GGDealsWishlist.Settings
 
         public ICommand ClearPriceHistoryCommand { get; }
         public ICommand ManageCollectionsCommand { get; }
+
+        public ICommand RunSetupCommand { get; }
         public ICommand OpenApiInfoCommand { get; }
         public ICommand OpenWishlistCommand { get; }
         public ICommand OpenAttributionCommand { get; }

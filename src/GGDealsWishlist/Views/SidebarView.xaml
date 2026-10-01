@@ -1051,6 +1051,7 @@
                             <TextBlock Style="{StaticResource GG.Muted}" TextWrapping="Wrap" TextTrimming="None"
                                        Text="Your API key is stored securely (encrypted for your Windows account) and is required to retrieve price data. It is never shown or logged." />
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Style="{StaticResource GG.LinkButton}" Content="Step-by-step setup" Command="{Binding ShowSetupCommand}" Margin="0,0,14,0" />
                                 <Button Style="{StaticResource GG.LinkButton}" Content="Learn more" Command="{Binding OpenApiInfoCommand}" Margin="0,0,14,0" />
                                 <Button Style="{StaticResource GG.LinkButton}" Content="Settings" Command="{Binding OpenSettingsCommand}" />
                             </StackPanel>

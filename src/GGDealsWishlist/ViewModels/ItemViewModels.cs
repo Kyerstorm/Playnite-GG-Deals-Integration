@@ -49,6 +49,9 @@ namespace GGDealsWishlist.ViewModels
         string PickSteamGridDbCover(long? steamAppId, string title);
 
         void ShowCollectionsManager();
+
+        /// <summary>Opens the first-run setup dialog (API key, region, wishlist source, covers).</summary>
+        void ShowSetupWizard();
     }
 
     public sealed class Option<T>

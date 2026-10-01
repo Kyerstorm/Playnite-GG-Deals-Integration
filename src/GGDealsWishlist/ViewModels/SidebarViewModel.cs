@@ -135,6 +135,7 @@ namespace GGDealsWishlist.ViewModels
             OpenAttributionCommand = new RelayCommand(p => OpenUrl((p as WishlistItemViewModel)?.GGDealsUrl ?? GGDealsHomeUrl));
             OpenApiInfoCommand = new RelayCommand(() => OpenUrl(ApiInfoUrl));
             ManageCollectionsCommand = new RelayCommand(() => host.ShowCollectionsManager());
+            ShowSetupCommand = new RelayCommand(() => host.ShowSetupWizard());
             NewCollectionForItemCommand = new RelayCommand(p => CreateCollectionFor(p is WishlistItemViewModel vm ? new[] { vm } : new WishlistItemViewModel[0]));
             TestSetupKeyCommand = new AsyncRelayCommand(TestSetupKeyAsync, () => !IsTestingSetupKey && !string.IsNullOrWhiteSpace(SetupApiKey));
 
@@ -764,6 +765,7 @@ namespace GGDealsWishlist.ViewModels
         public ICommand OpenAttributionCommand { get; }
         public ICommand OpenApiInfoCommand { get; }
         public ICommand ManageCollectionsCommand { get; }
+        public ICommand ShowSetupCommand { get; }
         public ICommand NewCollectionForItemCommand { get; }
         public ICommand TestSetupKeyCommand { get; }
         public ICommand RunStateActionCommand { get; }

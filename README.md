@@ -18,6 +18,7 @@ A Playnite extension that shows your wishlist with live GG.deals prices in a nat
   - A change of region or currency starts a new line, so currencies are never mixed.
   - *Settings → Advanced → Clear price history* deletes it. *Clear cached data* keeps it.
   - A small trend line appears on cover cards, and a chart in the expanded card and the details page. It can be hidden under *Information shown → Price history*.
+  - Hover the chart to see the price that was in effect at that point and when it started. The lowest recorded price is ringed and dated. When both official-store and keyshop prices have changed, an **Official | Keyshops** switch picks which one is drawn; it resets when the card is closed.
 - A header summary showing the number of games, games on sale and historical lows, plus the last update time.
 - Local search, sorting and filters. None of these make network calls:
   - **Sorting:** 10 sort orders.
@@ -29,7 +30,8 @@ A Playnite extension that shows your wishlist with live GG.deals prices in a nat
   - Add them to local collections, or remove them.
   - Copy GG.deals links.
   - **Change Cover** for a single game: pick from SteamGridDB, choose an image file, or paste a web address. Reset returns to automatic covers.
-- Automatic covers: your Playnite cover for owned games, then Steam's portrait art, then Steam's header image. With an optional free SteamGridDB API key (extension settings), games Steam has no artwork for are filled in from SteamGridDB.
+- Automatic covers: your Playnite cover for owned games, then Steam's portrait art, then Steam's header image. With an optional free SteamGridDB API key (extension settings), games Steam has no artwork for are filled in from SteamGridDB. A soft pulsing placeholder shows while a cover downloads and the artwork fades in; both are skipped when Windows animations are turned off.
+- Empty and error screens offer the next sensible step: *Fix API key* for a rejected key, a live *Retry in 42 s* countdown after a rate limit, *Steam privacy settings* for an empty Steam wishlist, and for no results a message naming your search and filters with separate *Clear search* and *Clear filters* buttons.
 - Playnite library matching. The extension checks the Steam App ID first, then a store link, then an exact title:
   - Similar titles are only suggested as possible matches. They never count as owned until you confirm them.
   - "Owned" means the game is anywhere in your Playnite library, installed or not.
@@ -64,8 +66,8 @@ When GG.deals adds a wishlist endpoint, the only change needed is a new `IGGDeal
 
 1. Download the `.pext` file from the [latest release](https://github.com/Kyerstorm/Playnite-GG-Deals-Integration/releases/latest).
 2. Drag the `.pext` file onto Playnite, or open it with Playnite.
-3. Open **GG.deals Wishlist** in the sidebar and paste your API key from your GG.deals account.
-4. Optional: in the extension settings, set **Wishlist source** to **My Steam wishlist** and enter your SteamID64.
+3. On first start a setup dialog opens. It walks through your API key (with a connection test), your region, your wishlist source (a Steam wishlist, with a check that it is public, or a manual list) and an optional SteamGridDB key. Closing it early is fine; it will not reopen by itself.
+4. To run it again, use the Playnite main menu → **GG.deals Wishlist → Set up…**, the *Step-by-step setup* link on the sidebar's first-run card, or *Settings → Advanced → Run setup again*. You can also still enter everything directly in the extension settings.
 
 To build it yourself, run `powershell -ExecutionPolicy Bypass -File build/pack.ps1`. This runs the tests, builds the Release version and writes `dist/*.pext`.
 
