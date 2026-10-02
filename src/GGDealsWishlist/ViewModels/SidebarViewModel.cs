@@ -50,6 +50,8 @@ namespace GGDealsWishlist.ViewModels
         private readonly Dictionary<string, WishlistItemViewModel> itemCache = new Dictionary<string, WishlistItemViewModel>();
         private readonly DispatcherTimer searchTimer;
         private readonly DispatcherTimer clockTimer;
+        private readonly DispatcherTimer countdownTimer;
+        private StateGuidance guidance = StateGuidance.For(new StateGuidanceInput());
         private FilterState filter;
         private SortMode sort;
         private ViewMode viewMode;
@@ -98,6 +100,16 @@ namespace GGDealsWishlist.ViewModels
             clockTimer.Tick += (s, e) => UpdateStatus();
             clockTimer.Start();
 
+            countdownTimer = new DispatcherTimer(DispatcherPriority.Background, host.Dispatcher) { Interval = TimeSpan.FromSeconds(1) };
+            countdownTimer.Tick += (s, e) =>
+            {
+                RefreshGuidance();
+                CommandManager.InvalidateRequerySuggested();
+            };
+
+            RunStateActionCommand = new RelayCommand(
+                p => RunStateAction(p as StateAction),
+                p => p is StateAction action && action.IsEnabled && (action.Kind != StateActionKind.Refresh || !IsRefreshing));
             RefreshCommand = new AsyncRelayCommand(() => RefreshAsync(), () => !IsRefreshing);
             RetryCommand = RefreshCommand;
             OpenSettingsCommand = new RelayCommand(() => host.OpenSettings());
@@ -123,6 +135,7 @@ namespace GGDealsWishlist.ViewModels
             OpenAttributionCommand = new RelayCommand(p => OpenUrl((p as WishlistItemViewModel)?.GGDealsUrl ?? GGDealsHomeUrl));
             OpenApiInfoCommand = new RelayCommand(() => OpenUrl(ApiInfoUrl));
             ManageCollectionsCommand = new RelayCommand(() => host.ShowCollectionsManager());
+            ShowSetupCommand = new RelayCommand(() => host.ShowSetupWizard());
             NewCollectionForItemCommand = new RelayCommand(p => CreateCollectionFor(p is WishlistItemViewModel vm ? new[] { vm } : new WishlistItemViewModel[0]));
             TestSetupKeyCommand = new AsyncRelayCommand(TestSetupKeyAsync, () => !IsTestingSetupKey && !string.IsNullOrWhiteSpace(SetupApiKey));
 
@@ -752,8 +765,74 @@ namespace GGDealsWishlist.ViewModels
         public ICommand OpenAttributionCommand { get; }
         public ICommand OpenApiInfoCommand { get; }
         public ICommand ManageCollectionsCommand { get; }
+        public ICommand ShowSetupCommand { get; }
         public ICommand NewCollectionForItemCommand { get; }
         public ICommand TestSetupKeyCommand { get; }
+        public ICommand RunStateActionCommand { get; }
+
+        // =========================================================================================
+        // Empty / error card actions
+        // =========================================================================================
+
+        /// <summary>The buttons for the current empty or error card, chosen from the state, the error kind and the active search and filters.</summary>
+        public IReadOnlyList<StateAction> StateActions => guidance.Actions;
+
+        /// <summary>Replaces the card's default text when the guidance has something more specific (the "no results" explanation).</summary>
+        public string StateMessage => guidance.Message;
+
+        private void RefreshGuidance()
+        {
+            guidance = StateGuidance.For(new StateGuidanceInput
+            {
+                State = state,
+                ErrorKind = status.LastError?.Kind ?? ApiErrorKind.None,
+                RetryAfterUtc = status.LastError?.RetryAfterUtc,
+                NowUtc = DateTime.UtcNow,
+                IsSteamSource = IsSteamSource,
+                SearchText = searchText,
+                FilterCount = filter.ActiveCount
+            });
+
+            // A "Retry in 42 s" label needs a one-second tick; stop ticking as soon as nothing counts down.
+            if (guidance.NeedsCountdown != countdownTimer.IsEnabled)
+            {
+                countdownTimer.IsEnabled = guidance.NeedsCountdown;
+            }
+
+            OnPropertyChanged(nameof(StateActions));
+            OnPropertyChanged(nameof(StateMessage));
+
+            // New buttons are created with a stale CanExecute until WPF next re-queries commands.
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        private void RunStateAction(StateAction action)
+        {
+            switch (action?.Kind)
+            {
+                case StateActionKind.Refresh:
+                    RefreshCommand.Execute(null);
+                    break;
+                case StateActionKind.OpenSettings:
+                    host.OpenSettings();
+                    break;
+                case StateActionKind.OpenApiInfo:
+                    OpenUrl(ApiInfoUrl);
+                    break;
+                case StateActionKind.OpenGGDeals:
+                    OpenUrl(host.Settings.GGDealsWishlistUrl);
+                    break;
+                case StateActionKind.OpenSteamPrivacy:
+                    OpenUrl(StateGuidance.SteamPrivacyUrl);
+                    break;
+                case StateActionKind.ClearSearch:
+                    SearchText = string.Empty;
+                    break;
+                case StateActionKind.ClearFilters:
+                    ClearFilters();
+                    break;
+            }
+        }
 
         // =========================================================================================
         // Actions
@@ -1170,6 +1249,7 @@ namespace GGDealsWishlist.ViewModels
             }
 
             State = next;
+            RefreshGuidance();
             OnPropertyChanged(nameof(HasWarning));
         }
 
@@ -1239,6 +1319,7 @@ namespace GGDealsWishlist.ViewModels
         {
             searchTimer.Stop();
             clockTimer.Stop();
+            countdownTimer.Stop();
             service.DataChanged -= OnServiceDataChanged;
             service.StatusChanged -= OnServiceStatusChanged;
             host.SettingsChanged -= OnSettingsChanged;

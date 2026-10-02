@@ -17,6 +17,7 @@
         <v:AllTrueToVisibilityConverter x:Key="AllVis" />
         <v:EqualsConverter x:Key="Eq" />
         <v:InSetToVisibilityConverter x:Key="InSet" />
+        <v:UpperCaseConverter x:Key="Upper" />
 
         <Style x:Key="GG.Muted" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
@@ -136,6 +137,52 @@
             </Setter>
         </Style>
 
+        <!-- Segmented "Official | Keyshops" switch above the price chart. The selected side is lit by a data trigger. -->
+        <Style x:Key="GG.ChartToggle" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource GG.Border}" BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource GG.CardHover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GG.ChartToggleOfficial" TargetType="Button" BasedOn="{StaticResource GG.ChartToggle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsOfficialChart}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource GG.Text}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="Background" Value="{DynamicResource GG.CardHover}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="GG.ChartToggleKeyshop" TargetType="Button" BasedOn="{StaticResource GG.ChartToggle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsKeyshopChart}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource GG.Text}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="Background" Value="{DynamicResource GG.CardHover}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="GG.QuickTab" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource GG.TextMuted}" />
             <Setter Property="FontSize" Value="11" />
@@ -202,6 +249,19 @@
             <WrapPanel />
         </ItemsPanelTemplate>
 
+        <!-- One button of an empty/error card. The view model decides which buttons exist; primary ones use the accent colour. -->
+        <DataTemplate x:Key="StateActionTemplate" DataType="{x:Type vm:StateAction}">
+            <Grid>
+                <!-- CommandParameter must come before Command, or CanExecute first runs with null and the button stays dim until the next requery. -->
+                <Button Style="{StaticResource GG.ActionButton}" Content="{Binding Label, Converter={StaticResource Upper}}"
+                        CommandParameter="{Binding}" Command="{Binding DataContext.RunStateActionCommand, ElementName=Root}"
+                        Visibility="{Binding IsPrimary, Converter={StaticResource Vis}}" />
+                <Button Style="{StaticResource GG.SecondaryButton}" Content="{Binding Label, Converter={StaticResource Upper}}"
+                        CommandParameter="{Binding}" Command="{Binding DataContext.RunStateActionCommand, ElementName=Root}"
+                        Visibility="{Binding IsPrimary, Converter={StaticResource InvVis}}" />
+            </Grid>
+        </DataTemplate>
+
         <!-- Recorded prices: only what this extension saw on its own refreshes (the GG.deals API has no history). -->
         <DataTemplate x:Key="PriceHistorySectionTemplate" DataType="{x:Type vm:WishlistItemViewModel}">
             <StackPanel MaxWidth="560" HorizontalAlignment="Stretch" Visibility="{Binding Display.ShowPriceHistory, Converter={StaticResource Vis}}">
@@ -209,20 +269,44 @@
                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource GG.Muted}" Text="{Binding HistoryRangeText}" Margin="8,0,0,0" />
                     <TextBlock Style="{StaticResource GG.SectionLabel}" Text="PRICE HISTORY" Margin="0,0,0,3" />
                 </DockPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,4" Visibility="{Binding CanCompareChart, Converter={StaticResource Vis}}">
+                    <Button Style="{StaticResource GG.ChartToggleOfficial}" Content="Official" Command="{Binding SetChartSourceCommand}" CommandParameter="Retail"
+                            ToolTip="Chart official store prices" />
+                    <Button Style="{StaticResource GG.ChartToggleKeyshop}" Content="Keyshops" Command="{Binding SetChartSourceCommand}" CommandParameter="Keyshop"
+                            Margin="4,0,0,0" ToolTip="Chart keyshop prices" />
+                </StackPanel>
                 <Border Background="{DynamicResource GG.Background}" CornerRadius="4" Padding="6,6,6,4" Visibility="{Binding HasPriceHistory, Converter={StaticResource Vis}}">
                     <StackPanel>
                         <Viewbox Stretch="Uniform" StretchDirection="Both">
-                            <Canvas Width="380" Height="70">
-                                <Polyline Points="{Binding HistoryLinePoints}" Stroke="{DynamicResource GG.Text}" StrokeThickness="1.8" StrokeLineJoin="Round" />
-                                <Path Data="{Binding HistoryMarkers}" Fill="{Binding Display.AccentBrush}" />
-                            </Canvas>
+                            <Grid Width="380" Height="70">
+                                <Canvas>
+                                    <Polyline Points="{Binding HistoryLinePoints}" Stroke="{DynamicResource GG.Text}" StrokeThickness="1.8" StrokeLineJoin="Round" />
+                                    <Path Data="{Binding HistoryMarkers}" Fill="{Binding Display.AccentBrush}" />
+                                    <!-- Ring around the lowest recorded price -->
+                                    <Ellipse Width="12" Height="12" StrokeThickness="1.6" Stroke="{Binding Display.AccentBrush}" IsHitTestVisible="False"
+                                             Canvas.Left="{Binding LowRingLeft}" Canvas.Top="{Binding LowRingTop}"
+                                             Visibility="{Binding HasLowMarker, Converter={StaticResource Vis}}" />
+                                    <!-- Hover guide: the price being held at the pointer -->
+                                    <Line X1="{Binding HoverX}" X2="{Binding HoverX}" Y1="0" Y2="70" Stroke="{DynamicResource GG.TextMuted}" StrokeThickness="1"
+                                          StrokeDashArray="2 2" IsHitTestVisible="False" Visibility="{Binding HasHover, Converter={StaticResource Vis}}" />
+                                    <Ellipse Width="7" Height="7" Fill="{DynamicResource GG.Text}" IsHitTestVisible="False"
+                                             Canvas.Left="{Binding HoverDotLeft}" Canvas.Top="{Binding HoverDotTop}"
+                                             Visibility="{Binding HasHover, Converter={StaticResource Vis}}" />
+                                    <Rectangle Width="380" Height="70" Fill="Transparent" MouseMove="OnChartMouseMove" MouseLeave="OnChartMouseLeave" />
+                                </Canvas>
+                                <Border HorizontalAlignment="{Binding HoverLabelAlignment}" VerticalAlignment="Top" Margin="{Binding HoverLabelMargin}"
+                                        Background="{DynamicResource GG.Card}" BorderBrush="{DynamicResource GG.Border}" BorderThickness="1" CornerRadius="3" Padding="5,1"
+                                        IsHitTestVisible="False" Visibility="{Binding HasHover, Converter={StaticResource Vis}}">
+                                    <TextBlock Text="{Binding HoverText}" FontSize="11" Foreground="{DynamicResource GG.Text}" />
+                                </Border>
+                            </Grid>
                         </Viewbox>
                         <Grid Margin="0,2,0,0">
                             <TextBlock Style="{StaticResource GG.Muted}" FontSize="10.5" HorizontalAlignment="Left">
                                 <Run Text="High" /> <Run Text="{Binding HistoryMaxText, Mode=OneWay}" />
                             </TextBlock>
                             <TextBlock Style="{StaticResource GG.Muted}" FontSize="10.5" HorizontalAlignment="Right">
-                                <Run Text="Low" /> <Run Text="{Binding HistoryMinText, Mode=OneWay}" />
+                                <Run Text="Low" /> <Run Text="{Binding HistoryMinText, Mode=OneWay}" /><Run Text="{Binding HistoryLowWhenText, Mode=OneWay}" />
                             </TextBlock>
                         </Grid>
                     </StackPanel>
@@ -947,8 +1031,8 @@
 
             <!-- No results -->
             <StackPanel Margin="16,24,16,0" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=NoResults}">
-                <TextBlock Text="No games match your search and filters." TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
-                <Button Style="{StaticResource GG.SecondaryButton}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" HorizontalAlignment="Center" Margin="0,10,0,0" />
+                <TextBlock Text="{Binding StateMessage}" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,12" />
+                <ItemsControl ItemsSource="{Binding StateActions}" ItemTemplate="{StaticResource StateActionTemplate}" HorizontalAlignment="Center" MinWidth="170" />
             </StackPanel>
 
             <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter='NeedsApiKey,WishlistUnavailable,EmptyWishlist,Error'}">
@@ -967,6 +1051,7 @@
                             <TextBlock Style="{StaticResource GG.Muted}" TextWrapping="Wrap" TextTrimming="None"
                                        Text="Your API key is stored securely (encrypted for your Windows account) and is required to retrieve price data. It is never shown or logged." />
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Style="{StaticResource GG.LinkButton}" Content="Step-by-step setup" Command="{Binding ShowSetupCommand}" Margin="0,0,14,0" />
                                 <Button Style="{StaticResource GG.LinkButton}" Content="Learn more" Command="{Binding OpenApiInfoCommand}" Margin="0,0,14,0" />
                                 <Button Style="{StaticResource GG.LinkButton}" Content="Settings" Command="{Binding OpenSettingsCommand}" />
                             </StackPanel>
@@ -982,8 +1067,7 @@
                             <TextBlock TextWrapping="Wrap" Margin="0,-6,0,12" Foreground="{DynamicResource GG.TextMuted}"
                                        Visibility="{Binding IsSteamSource, Converter={StaticResource InvVis}}"
                                        Text="Meanwhile you can show GG.deals prices for your public Steam wishlist, or for a manual list of games. Choose one in the extension settings (Wishlist source)." />
-                            <Button Style="{StaticResource GG.ActionButton}" Content="OPEN GG.DEALS" Command="{Binding OpenWishlistCommand}" />
-                            <Button Style="{StaticResource GG.SecondaryButton}" Content="WISHLIST SETTINGS" Command="{Binding OpenSettingsCommand}" />
+                            <ItemsControl ItemsSource="{Binding StateActions}" ItemTemplate="{StaticResource StateActionTemplate}" />
                         </StackPanel>
                     </Border>
 
@@ -991,7 +1075,7 @@
                     <Border Style="{StaticResource GG.Card}" Visibility="{Binding State, Converter={StaticResource InSet}, ConverterParameter=EmptyWishlist}">
                         <StackPanel>
                             <TextBlock Text="{Binding EmptyMessage}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,0,12" />
-                            <Button Style="{StaticResource GG.ActionButton}" Content="OPEN GG.DEALS" Command="{Binding OpenWishlistCommand}" />
+                            <ItemsControl ItemsSource="{Binding StateActions}" ItemTemplate="{StaticResource StateActionTemplate}" />
                         </StackPanel>
                     </Border>
 
@@ -1003,9 +1087,7 @@
                             <TextBlock Text="{Binding WarningMessage}" TextWrapping="Wrap" />
                             <TextBlock Style="{StaticResource GG.Muted}" Text="{Binding LastSuccessText}" TextWrapping="Wrap" Margin="0,6,0,0"
                                        Visibility="{Binding LastSuccessText, Converter={StaticResource Vis}}" />
-                            <Button Style="{StaticResource GG.ActionButton}" Content="RETRY" Command="{Binding RetryCommand}" Margin="0,12,0,6"
-                                    Visibility="{Binding CanRetry, Converter={StaticResource Vis}}" />
-                            <Button Style="{StaticResource GG.SecondaryButton}" Content="API SETTINGS" Command="{Binding OpenSettingsCommand}" />
+                            <ItemsControl ItemsSource="{Binding StateActions}" ItemTemplate="{StaticResource StateActionTemplate}" Margin="0,12,0,0" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

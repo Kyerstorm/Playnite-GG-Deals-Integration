@@ -70,6 +70,11 @@ namespace PreviewApp
                     vm.OpenDetails(vm.Items.FirstOrDefault(i => i.IsPotentialMatch) ?? vm.Items.First()));
                 s.RenderSidebar(output, "08-search-noresults-340", 340, 500, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm => vm.SearchText = "zzzz");
                 s.RenderSidebar(output, "09-filter-historical-340", 340, 800, ViewMode.Compact, ThemeMode.Dark, dark, vm => vm.Quick = QuickFilter.HistoricalLow);
+                s.RenderSidebar(output, "35-noresults-search-and-filter-340", 340, 400, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm =>
+                {
+                    vm.Quick = QuickFilter.HistoricalLow;
+                    vm.SearchText = "zzzz";
+                });
 
                 // Unable to refresh with cached data.
                 s.Clock.Advance(TimeSpan.FromHours(3));
@@ -84,6 +89,23 @@ namespace PreviewApp
                     return new GGDealsSettingsView(vm);
                 }, dark);
                 s.RenderControl(output, "12-collections", 560, 420, () => new CollectionsManagerView(new CollectionsManagerViewModel(s.Service, s.Host), ThemeMode.Dark), dark);
+
+                // Covers still downloading: an unroutable address keeps the images in their skeleton state for the whole render.
+                foreach (var themeCase in new[] { Tuple.Create("33-cover-loading-dark", dark), Tuple.Create("34-cover-loading-light", light) })
+                {
+                    s.RenderControl(output, themeCase.Item1, 360, 200, () =>
+                    {
+                        var row = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(16) };
+                        foreach (var n in new[] { 1, 2, 3 })
+                        {
+                            var image = new System.Windows.Controls.Image { Stretch = Stretch.UniformToFill };
+                            CoverImage.SetSource(image, "http://10.255.255.1/cover" + n + ".jpg");
+                            row.Children.Add(new System.Windows.Controls.Border { Width = 96, Height = 144, Margin = new Thickness(0, 0, 12, 0), CornerRadius = new CornerRadius(4), ClipToBounds = true, Child = image });
+                        }
+
+                        return row;
+                    }, themeCase.Item2);
+                }
             }
 
             // Price history: the first scenario has a single recorded price per game ("tracking started").
@@ -101,6 +123,19 @@ namespace PreviewApp
 
                 s.RenderSidebar(output, "20-cover-history-360", 360, 800, ViewMode.CoverInfo, ThemeMode.Dark, dark);
                 s.RenderSidebar(output, "21-cover-expanded-history-360", 360, 1000, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First(i => i.Title.StartsWith("Hollow"))));
+                s.RenderSidebar(output, "31-chart-hover-360", 360, 1000, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm =>
+                {
+                    var item = vm.Items.First(i => i.Title.StartsWith("Hollow"));
+                    vm.ToggleExpanded(item);
+                    item.HoverAt(290);
+                });
+                s.RenderSidebar(output, "32-chart-keyshops-360", 360, 1000, ViewMode.CoverInfo, ThemeMode.Dark, dark, vm =>
+                {
+                    var item = vm.Items.First(i => i.Title.StartsWith("Hollow"));
+                    vm.ToggleExpanded(item);
+                    item.ChartSource = PricePreference.Keyshop;
+                    item.HoverAt(60);
+                });
                 s.RenderSidebar(output, "22-grid-dark-360", 360, 900, ViewMode.Grid, ThemeMode.Dark, dark);
                 s.RenderSidebar(output, "23-grid-expanded-360", 360, 1100, ViewMode.Grid, ThemeMode.Dark, dark, vm => vm.ToggleExpanded(vm.Items.First(i => i.Title.StartsWith("Hollow"))));
                 s.RenderSidebar(output, "24-grid-wide-680", 680, 900, ViewMode.Grid, ThemeMode.Dark, dark);
@@ -115,6 +150,49 @@ namespace PreviewApp
             using (var s = Scenario.Create(withKey: false, manual: false))
             {
                 s.RenderSidebar(output, "13-first-run-340", 340, 700, ViewMode.CoverInfo, ThemeMode.Dark, dark);
+
+                // The setup dialog, one frame per step (dark), plus the key step in light.
+                var stages = new[] { "36-wizard-key", "37-wizard-region", "38-wizard-source", "39-wizard-covers", "40-wizard-done" };
+                for (var stage = 0; stage < stages.Length; stage++)
+                {
+                    var target = stage;
+                    s.RenderControl(output, stages[stage], 580, 560, () =>
+                    {
+                        var wizard = new SetupWizardViewModel(
+                            s.Host,
+                            (key, region) => Task.FromResult(new ConnectionTestResult()),
+                            id => Task.FromResult(new WishlistFetchResult { State = WishlistProviderState.Available, Entries = new List<WishlistEntry> { new WishlistEntry(), new WishlistEntry(), new WishlistEntry() } }),
+                            () => { });
+                        if (target > 0)
+                        {
+                            wizard.ApiKey = PreviewKey;
+                            wizard.TestKeyAsync().GetAwaiter().GetResult();
+                            wizard.Next();
+                        }
+
+                        if (target > 1)
+                        {
+                            wizard.Next();
+                            wizard.SteamIdText = "76561198000000000";
+                            wizard.CheckSteamAsync().GetAwaiter().GetResult();
+                        }
+
+                        if (target > 2)
+                        {
+                            wizard.Next();
+                        }
+
+                        if (target > 3)
+                        {
+                            wizard.Next();
+                        }
+
+                        return new SetupWizardView(wizard, ThemeMode.Dark);
+                    }, dark);
+                }
+
+                s.RenderControl(output, "41-wizard-key-light", 580, 560, () =>
+                    new SetupWizardView(new SetupWizardViewModel(s.Host, (key, region) => Task.FromResult(new ConnectionTestResult()), id => Task.FromResult(new WishlistFetchResult()), () => { }), ThemeMode.Light), light);
             }
 
             using (var s = Scenario.Create(withKey: true, manual: false))
@@ -495,6 +573,10 @@ this is not a steam id";
             public bool Confirm(string message, string caption) => false;
 
             public void ShowCollectionsManager()
+            {
+            }
+
+            public void ShowSetupWizard()
             {
             }
         }

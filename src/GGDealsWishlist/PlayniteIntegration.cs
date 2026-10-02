@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using GGDealsWishlist.Infrastructure;
 using GGDealsWishlist.Models;
+using GGDealsWishlist.Providers;
 using GGDealsWishlist.Services;
 using GGDealsWishlist.Settings;
 using GGDealsWishlist.ViewModels;
@@ -259,6 +262,46 @@ namespace GGDealsWishlist
         public bool Confirm(string message, string caption)
         {
             return api.Dialogs.ShowMessage(message, caption, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        }
+
+        public void ShowSetupWizard()
+        {
+            try
+            {
+                var current = service();
+                var viewModel = new SetupWizardViewModel(
+                    this,
+                    (key, region) => current.TestConnectionAsync(key, region),
+                    CheckSteamWishlistAsync,
+                    () => { _ = current.RefreshAsync(RefreshTrigger.Manual); });
+                var window = api.Dialogs.CreateWindow(new WindowCreationOptions
+                {
+                    ShowCloseButton = true,
+                    ShowMaximizeButton = false,
+                    ShowMinimizeButton = false
+                });
+                window.Title = "GG.deals Wishlist – Set up";
+                window.Width = 580;
+                window.Height = 560;
+                window.Owner = api.Dialogs.GetCurrentAppWindow();
+                window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                window.Content = new SetupWizardView(viewModel, settings.Theme);
+                viewModel.CloseRequested += (s, e) => window.Close();
+                window.ShowDialog();
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "Could not open the setup wizard");
+            }
+        }
+
+        /// <summary>Reads the given public Steam wishlist once, with a throwaway provider, so the wizard can say what it found.</summary>
+        private static async Task<WishlistFetchResult> CheckSteamWishlistAsync(string steamId)
+        {
+            using (var provider = new SteamWishlistProvider(() => true, () => steamId))
+            {
+                return await provider.RefreshAsync(CancellationToken.None);
+            }
         }
 
         public void ShowCollectionsManager()

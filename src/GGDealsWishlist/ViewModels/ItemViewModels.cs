@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using GGDealsWishlist.Api;
@@ -48,6 +49,9 @@ namespace GGDealsWishlist.ViewModels
         string PickSteamGridDbCover(long? steamAppId, string title);
 
         void ShowCollectionsManager();
+
+        /// <summary>Opens the first-run setup dialog (API key, region, wishlist source, covers).</summary>
+        void ShowSetupWizard();
     }
 
     public sealed class Option<T>
@@ -300,6 +304,10 @@ namespace GGDealsWishlist.ViewModels
         private readonly Func<IEnumerable<string>, string> describeCollections;
         private WishlistItem item;
         private PriceHistoryChart historyChart;
+        private PricePreference? chartSource;
+        private bool? canCompareChart;
+        private int hoverIndex = -1;
+        private double hoverCanvasX;
         private bool isExpanded;
 
         public WishlistItemViewModel(WishlistItem item, DisplayOptions display, Func<IEnumerable<string>, string> describeCollections)
@@ -307,6 +315,7 @@ namespace GGDealsWishlist.ViewModels
             this.item = item;
             Display = display;
             this.describeCollections = describeCollections;
+            SetChartSourceCommand = new RelayCommand(parameter => ChartSource = (PricePreference)Enum.Parse(typeof(PricePreference), (string)parameter));
         }
 
         public WishlistItem Item => item;
@@ -320,14 +329,21 @@ namespace GGDealsWishlist.ViewModels
         public void Update(WishlistItem newItem)
         {
             item = newItem;
-            historyChart = null;
+            ResetHistory();
             OnAllPropertiesChanged();
         }
 
         public void RefreshDisplay()
         {
-            historyChart = null;
+            ResetHistory();
             OnAllPropertiesChanged();
+        }
+
+        private void ResetHistory()
+        {
+            historyChart = null;
+            canCompareChart = null;
+            hoverIndex = -1;
         }
 
         /// <summary>Whether the card is opened in place to show its price history and store-type prices.</summary>
@@ -338,6 +354,15 @@ namespace GGDealsWishlist.ViewModels
             {
                 if (SetValue(ref isExpanded, value))
                 {
+                    if (!value && (chartSource.HasValue || hoverIndex >= 0))
+                    {
+                        // A closed card goes back to the configured price type and drops any hover.
+                        chartSource = null;
+                        historyChart = null;
+                        hoverIndex = -1;
+                        NotifyChartChanged();
+                    }
+
                     OnPropertyChanged(nameof(ExpandGlyph));
                     OnPropertyChanged(nameof(ExpandTooltip));
                     OnPropertyChanged(nameof(ItemWidth));
@@ -506,7 +531,135 @@ namespace GGDealsWishlist.ViewModels
         private const double SparkWidth = 80;
         private const double SparkHeight = 24;
 
-        private PriceHistoryChart HistoryChart => historyChart ?? (historyChart = PriceHistoryChart.Build(item.PriceHistory, Display.Settings.PricePreference));
+        private const double ChartPadX = 6;
+        private const double ChartPadY = 8;
+
+        private PriceHistoryChart HistoryChart => historyChart ?? (historyChart = PriceHistoryChart.Build(item.PriceHistory, ChartSource));
+
+        /// <summary>Which price type the chart draws. Defaults to the configured preference; the card's toggle overrides it until the card is closed.</summary>
+        public PricePreference ChartSource
+        {
+            get => chartSource ?? Display.Settings.PricePreference;
+            set
+            {
+                if (ChartSource == value)
+                {
+                    return;
+                }
+
+                chartSource = value;
+                historyChart = null;
+                hoverIndex = -1;
+                NotifyChartChanged();
+            }
+        }
+
+        public ICommand SetChartSourceCommand { get; }
+
+        public bool IsOfficialChart => ChartSource == PricePreference.Retail;
+
+        public bool IsKeyshopChart => ChartSource == PricePreference.Keyshop;
+
+        /// <summary>The toggle is only offered when both store types have recorded changes.</summary>
+        public bool CanCompareChart => Display.ShowPriceHistory && (canCompareChart ?? (canCompareChart = PriceHistoryChart.CanCompare(item.PriceHistory)).Value);
+
+        private void NotifyChartChanged()
+        {
+            foreach (var name in new[]
+            {
+                nameof(HasPriceHistory), nameof(IsNewInHistory), nameof(SparklinePoints), nameof(HistoryLinePoints), nameof(HistoryMarkers),
+                nameof(HistoryMaxText), nameof(HistoryMinText), nameof(HistoryLowWhenText), nameof(HistoryRangeText), nameof(IsOfficialChart),
+                nameof(IsKeyshopChart), nameof(HasLowMarker), nameof(LowRingLeft), nameof(LowRingTop)
+            })
+            {
+                OnPropertyChanged(name);
+            }
+
+            NotifyHoverChanged();
+        }
+
+        private void NotifyHoverChanged()
+        {
+            foreach (var name in new[]
+            {
+                nameof(HasHover), nameof(HoverX), nameof(HoverDotLeft), nameof(HoverDotTop), nameof(HoverText), nameof(HoverLabelAlignment), nameof(HoverLabelMargin)
+            })
+            {
+                OnPropertyChanged(name);
+            }
+        }
+
+        private static double CanvasX(double x) => ChartPadX + x * (ChartWidth - 2 * ChartPadX);
+
+        private static double CanvasY(double y) => ChartPadY + y * (ChartHeight - 2 * ChartPadY);
+
+        /// <summary>Follows the pointer: <paramref name="canvasX"/> is the position inside the 380-wide chart canvas.</summary>
+        public void HoverAt(double canvasX)
+        {
+            var chart = HistoryChart;
+            if (!chart.HasHistory)
+            {
+                return;
+            }
+
+            var unit = (canvasX - ChartPadX) / (ChartWidth - 2 * ChartPadX);
+            hoverIndex = chart.StepIndexAt(Math.Max(0, Math.Min(1, unit)));
+            hoverCanvasX = CanvasX(Math.Max(0, Math.Min(1, unit)));
+            NotifyHoverChanged();
+        }
+
+        public void ClearHover()
+        {
+            if (hoverIndex < 0)
+            {
+                return;
+            }
+
+            hoverIndex = -1;
+            NotifyHoverChanged();
+        }
+
+        public bool HasHover => hoverIndex >= 0 && HistoryChart.HasHistory;
+
+        public double HoverX => hoverCanvasX;
+
+        public double HoverDotLeft => HasHover ? hoverCanvasX - 3.5 : 0;
+
+        public double HoverDotTop => HasHover ? CanvasY(HistoryChart.Markers[hoverIndex].Y) - 3.5 : 0;
+
+        /// <summary>The price being held at the pointer and when it started, e.g. "€14.99 · since 12 Mar".</summary>
+        public string HoverText
+        {
+            get
+            {
+                if (!HasHover)
+                {
+                    return null;
+                }
+
+                var chart = HistoryChart;
+                return Format(chart.Prices[hoverIndex]) + " · since " + chart.Times[hoverIndex].ToLocalTime().ToString("d MMM", CultureInfo.CurrentCulture);
+            }
+        }
+
+        /// <summary>The readout sits on the side of the guide line with more room, so it never runs off the chart.</summary>
+        public HorizontalAlignment HoverLabelAlignment => hoverCanvasX > ChartWidth / 2 ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+
+        public Thickness HoverLabelMargin => hoverCanvasX > ChartWidth / 2
+            ? new Thickness(0, 2, ChartWidth - hoverCanvasX + 6, 0)
+            : new Thickness(hoverCanvasX + 6, 2, 0, 0);
+
+        /// <summary>A ring around the lowest recorded price. Not drawn on a flat line, where every point is the low.</summary>
+        public bool HasLowMarker => HasPriceHistory && HistoryChart.Min != HistoryChart.Max;
+
+        public double LowRingLeft => HistoryChart.LowIndex >= 0 ? CanvasX(HistoryChart.Markers[HistoryChart.LowIndex].X) - 6 : 0;
+
+        public double LowRingTop => HistoryChart.LowIndex >= 0 ? CanvasY(HistoryChart.Markers[HistoryChart.LowIndex].Y) - 6 : 0;
+
+        /// <summary>" · 12 Mar" - when the lowest price was first recorded - or null without a line.</summary>
+        public string HistoryLowWhenText => HistoryChart.LowIndex >= 0
+            ? " · " + HistoryChart.Times[HistoryChart.LowIndex].ToLocalTime().ToString("d MMM", CultureInfo.CurrentCulture)
+            : null;
 
         /// <summary>True when there are at least two recorded prices to draw a line through.</summary>
         public bool HasPriceHistory => Display.ShowPriceHistory && HistoryChart.HasHistory;

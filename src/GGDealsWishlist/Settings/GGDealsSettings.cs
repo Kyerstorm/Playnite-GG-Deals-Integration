@@ -43,11 +43,17 @@ namespace GGDealsWishlist.Settings
     /// </summary>
     public class GGDealsSettings
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
         public const string DefaultAccentColor = "#FF8A3D";
         public const string DefaultWishlistUrl = "https://gg.deals/wishlist/";
 
         public int SettingsVersion { get; set; } = CurrentVersion;
+
+        /// <summary>True once the first-run setup wizard was finished (or the user already had a key when it was introduced).</summary>
+        public bool SetupCompleted { get; set; }
+
+        /// <summary>True once the wizard has been opened automatically, so closing it early never brings it back uninvited.</summary>
+        public bool SetupPromptShown { get; set; }
 
         // Account / API
         public string ProtectedApiKey { get; set; }
@@ -217,6 +223,13 @@ namespace GGDealsWishlist.Settings
 
             ManualWishlist = ManualWishlist ?? string.Empty;
             SteamId = SteamId?.Trim() ?? string.Empty;
+
+            // Version 2 introduced the setup wizard: anyone who had already entered a key was set up long ago.
+            if (SettingsVersion < 2 && HasApiKey)
+            {
+                SetupCompleted = true;
+            }
+
             SettingsVersion = CurrentVersion;
         }
     }
