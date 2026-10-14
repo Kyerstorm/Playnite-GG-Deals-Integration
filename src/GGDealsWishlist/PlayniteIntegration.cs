@@ -296,7 +296,7 @@ namespace GGDealsWishlist
         }
 
         /// <summary>Reads the given public Steam wishlist once, with a throwaway provider, so the wizard can say what it found.</summary>
-        private static async Task<WishlistFetchResult> CheckSteamWishlistAsync(string steamId)
+        internal static async Task<WishlistFetchResult> CheckSteamWishlistAsync(string steamId)
         {
             using (var provider = new SteamWishlistProvider(() => true, () => steamId))
             {

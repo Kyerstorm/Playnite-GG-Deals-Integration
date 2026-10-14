@@ -111,6 +111,17 @@ namespace GGDealsWishlist.Tests
             Assert.Equal("Refresh", guidance.Actions[0].Label);
         }
 
+        [Theory]
+        [InlineData(SidebarState.EmptyWishlist)]
+        [InlineData(SidebarState.WishlistUnavailable)]
+        public void Another_persons_wishlist_offers_no_privacy_shortcut_that_would_open_the_users_own_settings(SidebarState state)
+        {
+            var guidance = StateGuidance.For(new StateGuidanceInput { State = state, NowUtc = Now, IsSteamSource = true, IsOtherWishlist = true });
+
+            Assert.Equal(new[] { "Refresh", "OpenSettings" }, Kinds(guidance));
+            Assert.Equal("Manage wishlists", guidance.Actions[1].Label);
+        }
+
         [Fact]
         public void An_empty_wishlist_from_another_source_offers_gg_deals_instead()
         {

@@ -1,6 +1,9 @@
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using GGDealsWishlist.Api;
 using GGDealsWishlist.Models;
+using GGDealsWishlist.Providers;
 using GGDealsWishlist.Services;
 
 namespace GGDealsWishlist.Settings
@@ -37,13 +40,27 @@ namespace GGDealsWishlist.Settings
         Large = 2
     }
 
+    /// <summary>Another person's public Steam wishlist the user can switch to. Never combined with any other list.</summary>
+    public class SavedWishlist
+    {
+        /// <summary>Stable scope id (a GUID). All data stored for this wishlist is keyed by it, so it never changes.</summary>
+        public string Id { get; set; } = string.Empty;
+
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>SteamID64 (a /profiles/ link is accepted while typing and normalised on save).</summary>
+        public string SteamId { get; set; } = string.Empty;
+
+        public SavedWishlist Clone() => new SavedWishlist { Id = Id, Name = Name, SteamId = SteamId };
+    }
+
     /// <summary>
     /// Persisted extension settings (stored by Playnite). The API key is only ever stored DPAPI-encrypted in
     /// <see cref="ProtectedApiKey"/>; the plain key never appears in this object.
     /// </summary>
     public class GGDealsSettings
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
         public const string DefaultAccentColor = "#FF8A3D";
         public const string DefaultWishlistUrl = "https://gg.deals/wishlist/";
 
@@ -67,6 +84,9 @@ namespace GGDealsWishlist.Settings
 
         /// <summary>SteamID64 (or /profiles/ link) whose public wishlist is used in <see cref="WishlistSourceMode.SteamWishlist"/> mode.</summary>
         public string SteamId { get; set; } = string.Empty;
+
+        /// <summary>Other people's Steam wishlists the sidebar can switch to (version 3). Always public Steam lists.</summary>
+        public List<SavedWishlist> OtherWishlists { get; set; } = new List<SavedWishlist>();
 
         public string GGDealsWishlistUrl { get; set; } = DefaultWishlistUrl;
 
@@ -177,6 +197,9 @@ namespace GGDealsWishlist.Settings
                     property.SetValue(this, property.GetValue(other));
                 }
             }
+
+            // The loop above copies the list by reference; the edit transaction needs an independent copy.
+            OtherWishlists = other.OtherWishlists?.Select(w => w?.Clone()).Where(w => w != null).ToList() ?? new List<SavedWishlist>();
         }
 
         public ServiceOptions ToServiceOptions()
@@ -189,8 +212,47 @@ namespace GGDealsWishlist.Settings
                 AutoRefresh = AutoRefresh,
                 EnableMatching = EnableMatching,
                 TreatExactTitleAsOwned = TreatExactTitleAsOwned,
-                HasApiKey = HasApiKey
+                HasApiKey = HasApiKey,
+                Wishlists = WishlistScope.Build(OtherWishlists?
+                    .Where(w => w != null && !string.IsNullOrEmpty(w.Id))
+                    .Select(w => new WishlistScope { Id = w.Id, Name = w.Name, SteamId = w.SteamId }))
             };
+        }
+
+        /// <summary>
+        /// Cleans the saved wishlists: drops entries with an unusable SteamID, repeated IDs and the user's own ID,
+        /// and fills in missing names and scope ids. Valid links are stored as the plain SteamID64.
+        /// </summary>
+        private static List<SavedWishlist> NormalizeOtherWishlists(IEnumerable<SavedWishlist> saved, string ownSteamId)
+        {
+            var result = new List<SavedWishlist>();
+            var seen = new HashSet<ulong>();
+            if (SteamIdParser.TryParse(ownSteamId, out var own))
+            {
+                seen.Add(own);
+            }
+
+            var usedScopeIds = new HashSet<string> { WishlistScope.OwnId };
+            foreach (var wishlist in saved ?? Enumerable.Empty<SavedWishlist>())
+            {
+                if (wishlist == null || !SteamIdParser.TryParse(wishlist.SteamId, out var steamId) || !seen.Add(steamId))
+                {
+                    continue;
+                }
+
+                var canonical = steamId.ToString(CultureInfo.InvariantCulture);
+                var id = string.IsNullOrWhiteSpace(wishlist.Id) ? System.Guid.NewGuid().ToString("N") : wishlist.Id.Trim();
+                if (!usedScopeIds.Add(id))
+                {
+                    id = System.Guid.NewGuid().ToString("N");
+                    usedScopeIds.Add(id);
+                }
+
+                var name = wishlist.Name?.Trim();
+                result.Add(new SavedWishlist { Id = id, Name = string.IsNullOrEmpty(name) ? canonical : name, SteamId = canonical });
+            }
+
+            return result;
         }
 
         /// <summary>Repairs out-of-range values from hand-edited or older settings files.</summary>
@@ -223,6 +285,7 @@ namespace GGDealsWishlist.Settings
 
             ManualWishlist = ManualWishlist ?? string.Empty;
             SteamId = SteamId?.Trim() ?? string.Empty;
+            OtherWishlists = NormalizeOtherWishlists(OtherWishlists, SteamId);
 
             // Version 2 introduced the setup wizard: anyone who had already entered a key was set up long ago.
             if (SettingsVersion < 2 && HasApiKey)

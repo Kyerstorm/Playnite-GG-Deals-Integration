@@ -831,7 +831,15 @@
                     <Button Style="{StaticResource GG.IconButton}" Content="{Binding ViewModeGlyph}" Command="{Binding CycleViewModeCommand}" ToolTip="{Binding ViewModeTooltip}" AutomationProperties.Name="Change view mode" />
                     <Button Style="{StaticResource GG.IconButton}" Content="⚙" Command="{Binding OpenSettingsCommand}" ToolTip="Extension settings" AutomationProperties.Name="Settings" />
                 </StackPanel>
-                <TextBlock Text="GG.DEALS WISHLIST" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Grid>
+                    <TextBlock Text="GG.DEALS WISHLIST" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding HasOtherWishlists, Converter={StaticResource InvVis}}" />
+
+                    <!-- Only shown once another wishlist was added. Exactly one wishlist is displayed at a time; they are never combined. -->
+                    <ComboBox ItemsSource="{Binding Wishlists}" SelectedItem="{Binding SelectedWishlist}" DisplayMemberPath="Name"
+                              FontWeight="Bold" FontSize="13" Margin="0,8,6,0" VerticalAlignment="Center" ToolTip="Switch wishlist"
+                              AutomationProperties.Name="Wishlist" Visibility="{Binding HasOtherWishlists, Converter={StaticResource Vis}}" />
+                </Grid>
             </DockPanel>
 
             <WrapPanel Margin="0,2,0,0">
@@ -1096,7 +1104,7 @@
 
         <!-- ============================== Footer / attribution ============================== -->
         <DockPanel Grid.Row="4" Margin="10,6,10,8">
-            <Button Content="Open GG.deals Wishlist ↗" Command="{Binding OpenWishlistCommand}">
+            <Button Content="{Binding OpenWishlistText}" Command="{Binding OpenWishlistCommand}">
                 <Button.Style>
                     <!-- Narrow sidebars: the link moves to its own line so the attribution is never truncated. -->
                     <Style TargetType="Button" BasedOn="{StaticResource GG.LinkButton}">

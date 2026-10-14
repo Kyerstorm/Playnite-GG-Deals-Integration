@@ -34,6 +34,9 @@ namespace GGDealsWishlist.Services
         public bool TreatExactTitleAsOwned { get; set; } = true;
 
         public bool HasApiKey { get; set; }
+
+        /// <summary>Every wishlist the user can switch to, the user's own first. Wishlists are never combined.</summary>
+        public List<WishlistScope> Wishlists { get; set; } = new List<WishlistScope> { WishlistScope.Own() };
     }
 
     public enum RefreshTrigger
@@ -128,9 +131,25 @@ namespace GGDealsWishlist.Services
         private IReadOnlyList<WishlistItem> items = new WishlistItem[0];
         private readonly ServiceStatus status = new ServiceStatus();
         private CancellationTokenSource refreshCancellation;
-        private DateTime nextAutoRefreshAllowedUtc = DateTime.MinValue;
-        private int consecutiveFailures;
         private Timer stateSaveTimer;
+
+        // The wishlist being viewed. Everything below the scope id (entries, favourites, collections, back-off)
+        // is looked up through it, so two wishlists can never leak into each other.
+        private string activeScopeId = WishlistScope.OwnId;
+        private int switchVersion;
+        private Task switchRefreshTask = Task.CompletedTask;
+        private readonly Dictionary<string, ScopeRuntime> runtime = new Dictionary<string, ScopeRuntime>();
+
+        /// <summary>The refresh <see cref="SwitchTo"/> started for a wishlist that needed one; tests await it.</summary>
+        internal Task SwitchRefreshTask => switchRefreshTask;
+
+        /// <summary>Refresh back-off of one wishlist, so a failing list cannot block another.</summary>
+        private sealed class ScopeRuntime
+        {
+            public DateTime NextAutoRefreshAllowedUtc = DateTime.MinValue;
+
+            public int ConsecutiveFailures;
+        }
 
         public WishlistDataService(
             WishlistProviderRegistry registry,
@@ -177,7 +196,7 @@ namespace GGDealsWishlist.Services
             {
                 lock (sync)
                 {
-                    return state.Collections.OrderBy(c => c.Order).ThenBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase)
+                    return state.Scope(activeScopeId).Collections.OrderBy(c => c.Order).ThenBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase)
                         .Select(c => new WishlistCollection { Id = c.Id, Name = c.Name, Icon = c.Icon, Order = c.Order }).ToList();
                 }
             }
@@ -188,8 +207,129 @@ namespace GGDealsWishlist.Services
             lock (sync)
             {
                 var ui = state.Ui;
-                return new UiState { ViewMode = ui.ViewMode, ViewModeChosen = ui.ViewModeChosen, Sort = ui.Sort, Filter = ui.Filter.Clone() };
+                return new UiState { ViewMode = ui.ViewMode, ViewModeChosen = ui.ViewModeChosen, Sort = ui.Sort, Filter = ui.Filter.Clone(), ActiveWishlistId = ui.ActiveWishlistId };
             }
+        }
+
+        // -----------------------------------------------------------------------------------------
+        // Wishlist scopes (own + other people's); exactly one is active, they are never combined
+        // -----------------------------------------------------------------------------------------
+
+        public string ActiveScopeId
+        {
+            get
+            {
+                lock (sync)
+                {
+                    return activeScopeId;
+                }
+            }
+        }
+
+        /// <summary>The wishlist being viewed (falls back to the user's own when the active one no longer exists).</summary>
+        public WishlistScope ActiveScope
+        {
+            get
+            {
+                var id = ActiveScopeId;
+                return Scopes.FirstOrDefault(s => s.Id == id) ?? WishlistScope.Own();
+            }
+        }
+
+        /// <summary>All wishlists the user can switch to, the user's own first.</summary>
+        public IReadOnlyList<WishlistScope> Scopes
+        {
+            get
+            {
+                var scopes = options().Wishlists ?? new List<WishlistScope>();
+                return scopes.Any(s => s != null && s.IsOwn) ? scopes : WishlistScope.Build(scopes);
+            }
+        }
+
+        /// <summary>Makes another wishlist the one being viewed. Its own data is shown, nothing from the previous one.</summary>
+        public bool SwitchTo(string scopeId)
+        {
+            if (string.IsNullOrEmpty(scopeId) || Scopes.All(s => s.Id != scopeId))
+            {
+                return false;
+            }
+
+            bool neverFetched;
+            lock (sync)
+            {
+                if (activeScopeId == scopeId)
+                {
+                    return true;
+                }
+
+                ActivateScope(scopeId);
+                neverFetched = !Snapshot(scopeId).AttemptUtc.HasValue;
+            }
+
+            ScheduleStateSave();
+            UpdateProviderStatus();
+            RecomputeMatches();
+            Rebuild();
+            RaiseStatusChanged();
+
+            // A wishlist that was never loaded would otherwise stay empty until the next scheduled refresh.
+            if (neverFetched || IsAutoRefreshDue())
+            {
+                switchRefreshTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RefreshAsync(neverFetched ? RefreshTrigger.Manual : RefreshTrigger.Automatic).ConfigureAwait(false);
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Error(e, "Refresh after switching wishlist failed");
+                    }
+                });
+            }
+
+            return true;
+        }
+
+        /// <summary>Points the service at <paramref name="scopeId"/>. Call with <c>sync</c> held.</summary>
+        private void ActivateScope(string scopeId)
+        {
+            activeScopeId = scopeId;
+            switchVersion++;
+            state.Ui.ActiveWishlistId = scopeId == WishlistScope.OwnId ? null : scopeId;
+
+            // Collections belong to one wishlist, so a collection filter cannot carry over to another.
+            state.Ui.Filter.CollectionIds.Clear();
+
+            var snapshot = Snapshot(scopeId);
+            status.LastError = snapshot.LastError;
+            status.RetryAfterUtc = snapshot.LastError?.RetryAfterUtc;
+            status.LastInfoMessage = null;
+            status.WishlistUpdatedUtc = snapshot.UpdatedUtc;
+        }
+
+        /// <summary>The cached data of one wishlist, created empty on first use. Call with <c>sync</c> held.</summary>
+        private WishlistSnapshot Snapshot(string scopeId)
+        {
+            if (!cache.Wishlists.TryGetValue(scopeId, out var snapshot) || snapshot == null)
+            {
+                snapshot = new WishlistSnapshot();
+                cache.Wishlists[scopeId] = snapshot;
+            }
+
+            snapshot.Entries = snapshot.Entries ?? new List<WishlistEntry>();
+            return snapshot;
+        }
+
+        private ScopeRuntime Runtime(string scopeId)
+        {
+            if (!runtime.TryGetValue(scopeId, out var scopeRuntime))
+            {
+                scopeRuntime = new ScopeRuntime();
+                runtime[scopeId] = scopeRuntime;
+            }
+
+            return scopeRuntime;
         }
 
         // -----------------------------------------------------------------------------------------
@@ -204,24 +344,31 @@ namespace GGDealsWishlist.Services
                 try
                 {
                     var loadedCache = cacheStore.Load();
+                    loadedCache.Normalize();
                     var loadedState = stateStore.Load();
                     loadedState.Normalize();
                     var loadedHistory = historyStore?.Load() ?? new PriceHistoryDocument();
                     loadedHistory.Normalize();
-                    loadedCache.WishlistEntries = loadedCache.WishlistEntries ?? new List<WishlistEntry>();
-                    loadedCache.Prices = loadedCache.Prices ?? new Dictionary<string, PriceData>();
                     rateLimits.Import(loadedCache.RateLimit);
+                    var knownScopes = Scopes;
 
                     lock (sync)
                     {
                         cache = loadedCache;
                         state = loadedState;
                         history = loadedHistory;
-                        status.LastError = loadedCache.LastError;
-                        status.RetryAfterUtc = loadedCache.LastError?.RetryAfterUtc;
+
+                        // Reopen the wishlist that was being viewed, unless it was removed in the meantime.
+                        var saved = loadedState.Ui.ActiveWishlistId;
+                        activeScopeId = !string.IsNullOrEmpty(saved) && knownScopes.Any(s => s.Id == saved) ? saved : WishlistScope.OwnId;
+                        state.Ui.ActiveWishlistId = activeScopeId == WishlistScope.OwnId ? null : activeScopeId;
+
+                        var snapshot = Snapshot(activeScopeId);
+                        status.LastError = snapshot.LastError;
+                        status.RetryAfterUtc = snapshot.LastError?.RetryAfterUtc;
                         if (status.RetryAfterUtc > clock.UtcNow)
                         {
-                            nextAutoRefreshAllowedUtc = status.RetryAfterUtc.Value;
+                            Runtime(activeScopeId).NextAutoRefreshAllowedUtc = status.RetryAfterUtc.Value;
                         }
                     }
 
@@ -297,21 +444,30 @@ namespace GGDealsWishlist.Services
                 SetProgress(true, "Updating…", 0, 0);
                 ErrorRecord error = null;
 
+                // The refresh belongs to the wishlist that is active right now, even if the user switches meanwhile.
+                string scopeId;
+                int version;
+                lock (sync)
+                {
+                    scopeId = activeScopeId;
+                    version = switchVersion;
+                }
+
                 // 1) Wishlist.
-                var wishlistError = await RefreshWishlistAsync(token).ConfigureAwait(false);
+                var wishlistError = await RefreshWishlistAsync(token, scopeId, version).ConfigureAwait(false);
                 error = wishlistError;
 
                 // 2) Prices.
                 List<PriceLookupKey> keys;
                 lock (sync)
                 {
-                    keys = SelectKeysNeedingRefresh(trigger, opts, clock.UtcNow);
+                    keys = SelectKeysNeedingRefresh(trigger, opts, clock.UtcNow, scopeId);
                 }
 
                 string info = null;
                 if (keys.Count == 0)
                 {
-                    info = HasAnyPriceableEntries() ? "Prices are up to date." : null;
+                    info = HasAnyPriceableEntries(scopeId) ? "Prices are up to date." : null;
                     if (error == null && trigger != RefreshTrigger.Manual)
                     {
                         outcome = RefreshOutcome.NothingToDo;
@@ -334,19 +490,24 @@ namespace GGDealsWishlist.Services
                 lock (sync)
                 {
                     cache.PricesAttemptUtc = started;
-                    cache.LastError = error;
+                    Snapshot(scopeId).LastError = error;
                     cache.RateLimit = rateLimits.Export();
-                    status.LastAttemptUtc = started;
-                    status.LastError = error;
-                    status.RetryAfterUtc = error?.RetryAfterUtc;
-                    status.LastInfoMessage = info;
-                    if (error == null)
+
+                    // The status line describes the wishlist on screen; a refresh of another one must not overwrite it.
+                    if (scopeId == activeScopeId)
                     {
-                        status.LastSuccessfulRefreshUtc = clock.UtcNow;
+                        status.LastAttemptUtc = started;
+                        status.LastError = error;
+                        status.RetryAfterUtc = error?.RetryAfterUtc;
+                        status.LastInfoMessage = info;
+                        if (error == null)
+                        {
+                            status.LastSuccessfulRefreshUtc = clock.UtcNow;
+                        }
                     }
                 }
 
-                ScheduleNextAutomaticRefresh(error, opts);
+                ScheduleNextAutomaticRefresh(error, opts, scopeId);
                 SaveCache();
                 SaveHistory();
                 if (error != null && outcome == RefreshOutcome.Completed)
@@ -374,7 +535,7 @@ namespace GGDealsWishlist.Services
             return outcome;
         }
 
-        private async Task<ErrorRecord> RefreshWishlistAsync(CancellationToken token)
+        private async Task<ErrorRecord> RefreshWishlistAsync(CancellationToken token, string scopeId, int version)
         {
             var provider = registry.Resolve();
             WishlistFetchResult result;
@@ -397,14 +558,25 @@ namespace GGDealsWishlist.Services
             var now = clock.UtcNow;
             ErrorRecord error = null;
             var entriesChanged = false;
+            var scope = Scopes.FirstOrDefault(s => s.Id == scopeId);
             lock (sync)
             {
-                cache.WishlistAttemptUtc = now;
+                if (version != switchVersion)
+                {
+                    // The user switched wishlists while this one was loading, so the provider may have read the other
+                    // one. Drop the result rather than risk putting one person's games on another person's list.
+                    Log.Info("Discarded a wishlist refresh because the wishlist was switched while it loaded.");
+                    return null;
+                }
+
+                var snapshot = Snapshot(scopeId);
+                snapshot.AttemptUtc = now;
                 if (result.State == WishlistProviderState.Available)
                 {
-                    cache.WishlistEntries = SanitizeEntries(result.Entries, provider.Id);
-                    cache.WishlistProviderId = provider.Id;
-                    cache.WishlistUpdatedUtc = now;
+                    snapshot.Entries = SanitizeEntries(result.Entries, provider.Id);
+                    snapshot.ProviderId = provider.Id;
+                    snapshot.SteamId = scope?.SteamId;
+                    snapshot.UpdatedUtc = now;
                     entriesChanged = true;
                 }
                 else if (result.State == WishlistProviderState.Error)
@@ -413,11 +585,11 @@ namespace GGDealsWishlist.Services
                     error = NewError(result.Error == ApiErrorKind.None ? ApiErrorKind.UnexpectedResponse : result.Error, null, result.Message);
                     error.Source = provider.DisplayName;
                 }
-                else if (cache.WishlistProviderId != provider.Id || cache.WishlistEntries.Count > 0)
+                else if (snapshot.ProviderId != provider.Id || snapshot.Entries.Count > 0)
                 {
                     // The source is no longer available: do not keep showing entries from a different source.
-                    cache.WishlistEntries = new List<WishlistEntry>();
-                    cache.WishlistProviderId = provider.Id;
+                    snapshot.Entries = new List<WishlistEntry>();
+                    snapshot.ProviderId = provider.Id;
                     entriesChanged = true;
                 }
 
@@ -426,7 +598,7 @@ namespace GGDealsWishlist.Services
                 status.ProviderState = result.State;
                 status.ProviderMessage = result.Message ?? provider.StateMessage;
                 status.ProviderCapabilities = provider.Capabilities;
-                status.WishlistUpdatedUtc = cache.WishlistUpdatedUtc;
+                status.WishlistUpdatedUtc = snapshot.UpdatedUtc;
             }
 
             if (entriesChanged)
@@ -494,7 +666,7 @@ namespace GGDealsWishlist.Services
         }
 
         /// <summary>Ids whose price is missing, from another region, or older than the refresh threshold - oldest first.</summary>
-        internal List<PriceLookupKey> SelectKeysNeedingRefresh(RefreshTrigger trigger, ServiceOptions opts, DateTime nowUtc)
+        internal List<PriceLookupKey> SelectKeysNeedingRefresh(RefreshTrigger trigger, ServiceOptions opts, DateTime nowUtc, string scopeId = null)
         {
             var interval = TimeSpan.FromMinutes(Math.Max(15, opts.RefreshIntervalMinutes));
             var threshold = trigger == RefreshTrigger.Manual
@@ -503,7 +675,7 @@ namespace GGDealsWishlist.Services
 
             var candidates = new List<KeyValuePair<PriceLookupKey, DateTime>>();
             var seen = new HashSet<PriceLookupKey>();
-            foreach (var entry in cache.WishlistEntries)
+            foreach (var entry in Snapshot(scopeId ?? activeScopeId).Entries)
             {
                 var key = entry.PriceKey;
                 if (!key.HasValue || !seen.Add(key.Value))
@@ -540,13 +712,15 @@ namespace GGDealsWishlist.Services
             lock (sync)
             {
                 var now = clock.UtcNow;
-                if (!status.IsInitialized || status.IsRefreshing || now < nextAutoRefreshAllowedUtc)
+                if (!status.IsInitialized || status.IsRefreshing || now < Runtime(activeScopeId).NextAutoRefreshAllowedUtc)
                 {
                     return false;
                 }
 
+                // Only the wishlist on screen refreshes automatically; the others wait until they are switched to.
                 var interval = TimeSpan.FromMinutes(Math.Max(15, opts.RefreshIntervalMinutes));
-                var wishlistDue = !cache.WishlistAttemptUtc.HasValue || now - cache.WishlistAttemptUtc.Value >= interval;
+                var attempt = Snapshot(activeScopeId).AttemptUtc;
+                var wishlistDue = !attempt.HasValue || now - attempt.Value >= interval;
                 var provider = registry.Resolve();
                 var providerUsable = provider.GetState() == WishlistProviderState.Available;
                 if (providerUsable && wishlistDue)
@@ -558,32 +732,33 @@ namespace GGDealsWishlist.Services
             }
         }
 
-        private void ScheduleNextAutomaticRefresh(ErrorRecord error, ServiceOptions opts)
+        private void ScheduleNextAutomaticRefresh(ErrorRecord error, ServiceOptions opts, string scopeId)
         {
             var now = clock.UtcNow;
             lock (sync)
             {
+                var scopeRuntime = Runtime(scopeId);
                 if (error == null || error.Kind == ApiErrorKind.Cancelled)
                 {
-                    consecutiveFailures = 0;
-                    nextAutoRefreshAllowedUtc = now.AddMinutes(1);
+                    scopeRuntime.ConsecutiveFailures = 0;
+                    scopeRuntime.NextAutoRefreshAllowedUtc = now.AddMinutes(1);
                     return;
                 }
 
                 switch (error.Kind)
                 {
                     case ApiErrorKind.RateLimited:
-                        nextAutoRefreshAllowedUtc = error.RetryAfterUtc ?? now.AddMinutes(5);
+                        scopeRuntime.NextAutoRefreshAllowedUtc = error.RetryAfterUtc ?? now.AddMinutes(5);
                         break;
                     case ApiErrorKind.InvalidApiKey:
                     case ApiErrorKind.NotConfigured:
                         // Wait for the user to fix the key; OnOptionsChanged re-enables automatic refresh.
-                        nextAutoRefreshAllowedUtc = DateTime.MaxValue;
+                        scopeRuntime.NextAutoRefreshAllowedUtc = DateTime.MaxValue;
                         break;
                     default:
-                        consecutiveFailures++;
-                        var backoff = TimeSpan.FromMinutes(Math.Min(Math.Max(15, opts.RefreshIntervalMinutes), 5 * Math.Pow(2, consecutiveFailures - 1)));
-                        nextAutoRefreshAllowedUtc = now + backoff;
+                        scopeRuntime.ConsecutiveFailures++;
+                        var backoff = TimeSpan.FromMinutes(Math.Min(Math.Max(15, opts.RefreshIntervalMinutes), 5 * Math.Pow(2, scopeRuntime.ConsecutiveFailures - 1)));
+                        scopeRuntime.NextAutoRefreshAllowedUtc = now + backoff;
                         break;
                 }
             }
@@ -596,21 +771,75 @@ namespace GGDealsWishlist.Services
         /// <summary>Call after settings are saved: re-evaluates provider, prices and matches.</summary>
         public void OnOptionsChanged()
         {
+            var scopes = Scopes;
             lock (sync)
             {
-                nextAutoRefreshAllowedUtc = DateTime.MinValue;
-                consecutiveFailures = 0;
+                ReconcileScopes(scopes);
+
+                // A fixed key or settings change lets every wishlist try again.
+                foreach (var scopeRuntime in runtime.Values)
+                {
+                    scopeRuntime.NextAutoRefreshAllowedUtc = DateTime.MinValue;
+                    scopeRuntime.ConsecutiveFailures = 0;
+                }
+
+                foreach (var snapshot in cache.Wishlists.Values)
+                {
+                    if (snapshot?.LastError != null && (snapshot.LastError.Kind == ApiErrorKind.NotConfigured || snapshot.LastError.Kind == ApiErrorKind.InvalidApiKey))
+                    {
+                        snapshot.LastError = null;
+                    }
+                }
+
                 if (status.LastError != null && (status.LastError.Kind == ApiErrorKind.NotConfigured || status.LastError.Kind == ApiErrorKind.InvalidApiKey))
                 {
                     status.LastError = null;
-                    cache.LastError = null;
                 }
             }
 
+            ScheduleStateSave();
             UpdateProviderStatus();
             RecomputeMatches();
             Rebuild();
             RaiseStatusChanged();
+        }
+
+        /// <summary>
+        /// Brings stored data in line with the configured wishlists: forgets removed ones, forgets the cached entries of
+        /// one whose SteamID was edited, and returns to the user's own wishlist when the active one is gone. Call with <c>sync</c> held.
+        /// </summary>
+        private void ReconcileScopes(IReadOnlyList<WishlistScope> scopes)
+        {
+            var ids = new HashSet<string>(scopes.Select(s => s.Id)) { WishlistScope.OwnId };
+            foreach (var key in cache.Wishlists.Keys.Where(k => !ids.Contains(k)).ToList())
+            {
+                cache.Wishlists.Remove(key);
+            }
+
+            foreach (var key in state.Scopes.Keys.Where(k => !ids.Contains(k)).ToList())
+            {
+                state.Scopes.Remove(key);
+            }
+
+            foreach (var key in runtime.Keys.Where(k => !ids.Contains(k)).ToList())
+            {
+                runtime.Remove(key);
+            }
+
+            foreach (var scope in scopes.Where(s => !s.IsOwn))
+            {
+                if (cache.Wishlists.TryGetValue(scope.Id, out var snapshot) && snapshot != null
+                    && snapshot.SteamId != null && !string.Equals(snapshot.SteamId, scope.SteamId, StringComparison.Ordinal))
+                {
+                    // Another person's list under the same name: never keep showing the previous person's games.
+                    cache.Wishlists[scope.Id] = new WishlistSnapshot();
+                }
+            }
+
+            if (!ids.Contains(activeScopeId))
+            {
+                ActivateScope(WishlistScope.OwnId);
+            }
         }
 
         public void OnLibraryChanged()
@@ -623,11 +852,22 @@ namespace GGDealsWishlist.Services
         {
             lock (sync)
             {
-                cache = new CacheDocument { RateLimit = rateLimits.Export(), WishlistProviderId = cache.WishlistProviderId };
+                var previous = cache;
+                cache = new CacheDocument { RateLimit = rateLimits.Export() };
+
+                // Entries and prices go; which source and SteamID each wishlist was loaded from is kept.
+                foreach (var pair in previous.Wishlists)
+                {
+                    cache.Wishlists[pair.Key] = new WishlistSnapshot { ProviderId = pair.Value?.ProviderId, SteamId = pair.Value?.SteamId };
+                }
+
                 status.WishlistUpdatedUtc = null;
                 status.PricesUpdatedUtc = null;
                 status.LastError = null;
-                nextAutoRefreshAllowedUtc = DateTime.MinValue;
+                foreach (var scopeRuntime in runtime.Values)
+                {
+                    scopeRuntime.NextAutoRefreshAllowedUtc = DateTime.MinValue;
+                }
             }
 
             SaveCache();
@@ -679,10 +919,11 @@ namespace GGDealsWishlist.Services
 
             lock (sync)
             {
-                state.Favourites.Remove(key);
+                var favourites = state.Scope(activeScopeId).Favourites;
+                favourites.Remove(key);
                 if (favourite)
                 {
-                    state.Favourites.Add(key);
+                    favourites.Add(key);
                 }
             }
 
@@ -700,14 +941,15 @@ namespace GGDealsWishlist.Services
             WishlistCollection collection;
             lock (sync)
             {
+                var collections = state.Scope(activeScopeId).Collections;
                 collection = new WishlistCollection
                 {
                     Id = Guid.NewGuid().ToString("N"),
                     Name = name.Trim(),
                     Icon = string.IsNullOrWhiteSpace(icon) ? null : icon.Trim(),
-                    Order = state.Collections.Count == 0 ? 0 : state.Collections.Max(c => c.Order) + 1
+                    Order = collections.Count == 0 ? 0 : collections.Max(c => c.Order) + 1
                 };
-                state.Collections.Add(collection);
+                collections.Add(collection);
             }
 
             ScheduleStateSave();
@@ -724,7 +966,7 @@ namespace GGDealsWishlist.Services
 
             lock (sync)
             {
-                var collection = state.Collections.FirstOrDefault(c => c.Id == id);
+                var collection = state.Scope(activeScopeId).Collections.FirstOrDefault(c => c.Id == id);
                 if (collection == null)
                 {
                     return;
@@ -742,8 +984,9 @@ namespace GGDealsWishlist.Services
         {
             lock (sync)
             {
-                state.Collections.RemoveAll(c => c.Id == id);
-                foreach (var list in state.Memberships.Values)
+                var scopeState = state.Scope(activeScopeId);
+                scopeState.Collections.RemoveAll(c => c.Id == id);
+                foreach (var list in scopeState.Memberships.Values)
                 {
                     list.Remove(id);
                 }
@@ -759,17 +1002,18 @@ namespace GGDealsWishlist.Services
         {
             lock (sync)
             {
-                if (state.Collections.All(c => c.Id != collectionId))
+                var scopeState = state.Scope(activeScopeId);
+                if (scopeState.Collections.All(c => c.Id != collectionId))
                 {
                     return;
                 }
 
                 foreach (var key in keys.Where(k => !string.IsNullOrEmpty(k)))
                 {
-                    if (!state.Memberships.TryGetValue(key, out var list))
+                    if (!scopeState.Memberships.TryGetValue(key, out var list))
                     {
                         list = new List<string>();
-                        state.Memberships[key] = list;
+                        scopeState.Memberships[key] = list;
                     }
 
                     list.Remove(collectionId);
@@ -780,7 +1024,7 @@ namespace GGDealsWishlist.Services
 
                     if (list.Count == 0)
                     {
-                        state.Memberships.Remove(key);
+                        scopeState.Memberships.Remove(key);
                     }
                 }
             }
@@ -793,8 +1037,8 @@ namespace GGDealsWishlist.Services
         {
             lock (sync)
             {
-                var keys = new HashSet<string>(cache.WishlistEntries.Select(e => e.Key));
-                return state.Memberships.Count(m => keys.Contains(m.Key) && m.Value.Contains(collectionId));
+                var keys = new HashSet<string>(Snapshot(activeScopeId).Entries.Select(e => e.Key));
+                return state.Scope(activeScopeId).Memberships.Count(m => keys.Contains(m.Key) && m.Value.Contains(collectionId));
             }
         }
 
@@ -846,7 +1090,8 @@ namespace GGDealsWishlist.Services
 
             lock (sync)
             {
-                state.Ui = new UiState { ViewMode = ui.ViewMode, ViewModeChosen = ui.ViewModeChosen, Sort = ui.Sort, Filter = (ui.Filter ?? new Querying.FilterState()).Clone() };
+                // The active wishlist is owned by the service (SwitchTo); a caller saving the view settings must not reset it.
+                state.Ui = new UiState { ViewMode = ui.ViewMode, ViewModeChosen = ui.ViewModeChosen, Sort = ui.Sort, Filter = (ui.Filter ?? new Querying.FilterState()).Clone(), ActiveWishlistId = state.Ui.ActiveWishlistId };
             }
 
             ScheduleStateSave();
@@ -895,7 +1140,7 @@ namespace GGDealsWishlist.Services
             lock (sync)
             {
                 var result = new Dictionary<string, MatchResult>();
-                foreach (var entry in cache.WishlistEntries)
+                foreach (var entry in Snapshot(activeScopeId).Entries)
                 {
                     if (entry?.Key == null || result.ContainsKey(entry.Key))
                     {
@@ -933,15 +1178,17 @@ namespace GGDealsWishlist.Services
                 List<WishlistItem> built;
                 lock (sync)
                 {
-                    var favourites = new HashSet<string>(state.Favourites);
+                    var snapshot = Snapshot(activeScopeId);
+                    var scopeState = state.Scope(activeScopeId);
+                    var favourites = new HashSet<string>(scopeState.Favourites);
                     var staleAfter = TimeSpan.FromMinutes(Math.Max(15, opts.RefreshIntervalMinutes) * 2);
-                    built = new List<WishlistItem>(cache.WishlistEntries.Count);
-                    foreach (var entry in cache.WishlistEntries)
+                    built = new List<WishlistItem>(snapshot.Entries.Count);
+                    foreach (var entry in snapshot.Entries)
                     {
                         try
                         {
                             matchCache.TryGetValue(entry.Key, out var match);
-                            state.Memberships.TryGetValue(entry.Key, out var memberships);
+                            scopeState.Memberships.TryGetValue(entry.Key, out var memberships);
                             var resolved = WishlistItemFactory.Create(entry, PriceFor(entry), match, favourites.Contains(entry.Key), memberships, opts, now, staleAfter);
                             resolved.CoverOverride = state.CoverOverrides.TryGetValue(entry.Key, out var customCover) ? customCover : null;
                             resolved.PriceHistory = entry.PriceKey.HasValue ? history.Get(entry.PriceKey.Value.ToString())?.Snapshot() : null;
@@ -954,9 +1201,9 @@ namespace GGDealsWishlist.Services
                         }
                     }
 
-                    status.HasCachedData = cache.WishlistEntries.Count > 0;
+                    status.HasCachedData = snapshot.Entries.Count > 0;
                     status.HasApiKey = opts.HasApiKey;
-                    status.WishlistUpdatedUtc = cache.WishlistUpdatedUtc;
+                    status.WishlistUpdatedUtc = snapshot.UpdatedUtc;
                     status.PricesUpdatedUtc = cache.PricesUpdatedUtc;
                 }
 
@@ -1004,11 +1251,11 @@ namespace GGDealsWishlist.Services
             }
         }
 
-        private bool HasAnyPriceableEntries()
+        private bool HasAnyPriceableEntries(string scopeId)
         {
             lock (sync)
             {
-                return cache.WishlistEntries.Any(e => e.PriceKey.HasValue);
+                return Snapshot(scopeId).Entries.Any(e => e.PriceKey.HasValue);
             }
         }
 
@@ -1088,8 +1335,13 @@ namespace GGDealsWishlist.Services
             PriceHistoryDocument copy;
             lock (sync)
             {
-                // Games removed from the wishlist stop accumulating history.
-                var tracked = new HashSet<string>(cache.WishlistEntries.Where(e => e.PriceKey.HasValue).Select(e => e.PriceKey.Value.ToString()));
+                // Games removed from every wishlist stop accumulating history. A game that is only on another saved
+                // wishlist is still tracked, so switching wishlists never costs a game its price history.
+                var tracked = new HashSet<string>(cache.Wishlists.Values
+                    .Where(w => w?.Entries != null)
+                    .SelectMany(w => w.Entries)
+                    .Where(e => e.PriceKey.HasValue)
+                    .Select(e => e.PriceKey.Value.ToString()));
                 if (tracked.Count > 0 && history.Prune(tracked) > 0)
                 {
                     historyDirty = true;

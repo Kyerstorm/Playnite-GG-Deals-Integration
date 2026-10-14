@@ -13,13 +13,15 @@ using GGDealsWishlist.Models;
 
 namespace GGDealsWishlist.Providers
 {
-    /// <summary>Parses the ways users identify their Steam account (SteamID64 or a /profiles/ link).</summary>
+    /// <summary>Parses the ways users identify a Steam account: a SteamID64, a profile link, or a shareable store wishlist link.</summary>
     public static class SteamIdParser
     {
         // Individual-account SteamID64s start at 76561197960265728 (universe 1, type 1).
         private const ulong IndividualBase = 76561197960265728UL;
-        private static readonly Regex ProfileUrl = new Regex(@"steamcommunity\.com/profiles/(\d{17})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex VanityUrl = new Regex(@"steamcommunity\.com/id/[^/\s]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        // Both the profile page and the shareable store wishlist link carry the SteamID64:
+        //   steamcommunity.com/profiles/<id>   and   store.steampowered.com/wishlist/profiles/<id>/?sort=name
+        private static readonly Regex ProfileUrl = new Regex(@"(?:steamcommunity\.com/profiles|store\.steampowered\.com/wishlist/profiles)/(\d{17})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex VanityUrl = new Regex(@"(?:steamcommunity\.com/id|store\.steampowered\.com/wishlist/id)/[^/\s?]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static bool TryParse(string text, out ulong steamId)
         {
@@ -51,8 +53,8 @@ namespace GGDealsWishlist.Providers
             }
 
             return VanityUrl.IsMatch(text)
-                ? "Custom profile links (steamcommunity.com/id/…) can't be used. Copy your 17-digit SteamID64 instead (Steam → Account details, or a site such as steamid.io)."
-                : "Enter your 17-digit SteamID64 (it starts with 7656119) or a steamcommunity.com/profiles/… link.";
+                ? "Custom profile links (…/id/name) can't be used. Use the 17-digit SteamID64 instead (Steam → Account details, or a site such as steamid.io), or a wishlist link that contains it (…/wishlist/profiles/7656…)."
+                : "Enter a 17-digit SteamID64 (it starts with 7656119) or a Steam wishlist or profile link that contains it.";
         }
     }
 

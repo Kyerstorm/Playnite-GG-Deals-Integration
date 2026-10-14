@@ -323,14 +323,14 @@ namespace GGDealsWishlist.Tests
                 var cacheStore = new VersionedJsonStore<CacheDocument>(dir.File("cache.json"), CacheDocument.CurrentVersion);
                 var doc = new CacheDocument
                 {
-                    WishlistEntries = { new WishlistEntry { Key = "steam:app:1", SteamId = 1, Title = "One", WishlistPosition = 1 } },
+                    Wishlists = { { WishlistScope.OwnId, new WishlistSnapshot { Entries = { new WishlistEntry { Key = "steam:app:1", SteamId = 1, Title = "One", WishlistPosition = 1 } } } } },
                     Prices = { { "app:1", new PriceData { LookupKey = "app:1", Found = true, CurrentRetail = 9.99m, Currency = "GBP", Region = "gb", FetchedUtc = new DateTime(2026, 9, 27, 13, 42, 0, DateTimeKind.Utc) } } },
                     PricesUpdatedUtc = new DateTime(2026, 9, 27, 13, 42, 0, DateTimeKind.Utc)
                 };
                 cacheStore.Save(doc);
                 var loaded = cacheStore.Load();
 
-                Assert.Equal("One", loaded.WishlistEntries.Single().Title);
+                Assert.Equal("One", loaded.Wishlists[WishlistScope.OwnId].Entries.Single().Title);
                 Assert.Equal(9.99m, loaded.Prices["app:1"].CurrentRetail);
                 Assert.Equal(doc.PricesUpdatedUtc, loaded.PricesUpdatedUtc);
                 Assert.Equal(DateTimeKind.Utc, loaded.Prices["app:1"].FetchedUtc.Kind);
@@ -338,19 +338,27 @@ namespace GGDealsWishlist.Tests
                 var stateStore = new VersionedJsonStore<LocalStateDocument>(dir.File("state.json"), LocalStateDocument.CurrentVersion);
                 var state = new LocalStateDocument
                 {
-                    Favourites = { "steam:app:1" },
-                    Collections = { new WishlistCollection { Id = "c", Name = "Buy Soon", Icon = "🎯" } },
-                    Memberships = { { "steam:app:1", new List<string> { "c" } } },
+                    Scopes =
+                    {
+                        {
+                            WishlistScope.OwnId, new ScopeLocalState
+                            {
+                                Favourites = { "steam:app:1" },
+                                Collections = { new WishlistCollection { Id = "c", Name = "Buy Soon", Icon = "🎯" } },
+                                Memberships = { { "steam:app:1", new List<string> { "c" } } }
+                            }
+                        }
+                    },
                     Ui = new UiState { ViewMode = ViewMode.List, Sort = SortMode.PriceAscending, Filter = new FilterState { MinDiscount = 50, CollectionIds = { "c" } } }
                 };
                 stateStore.Save(state);
                 var loadedState = stateStore.Load();
 
-                Assert.Equal("🎯", loadedState.Collections.Single().Icon);
+                Assert.Equal("🎯", loadedState.Scopes[WishlistScope.OwnId].Collections.Single().Icon);
                 Assert.Equal(ViewMode.List, loadedState.Ui.ViewMode);
                 Assert.Equal(SortMode.PriceAscending, loadedState.Ui.Sort);
                 Assert.Equal(50, loadedState.Ui.Filter.MinDiscount);
-                Assert.Equal("c", loadedState.Memberships["steam:app:1"].Single());
+                Assert.Equal("c", loadedState.Scopes[WishlistScope.OwnId].Memberships["steam:app:1"].Single());
             }
         }
 
@@ -364,7 +372,7 @@ namespace GGDealsWishlist.Tests
 
                 var loaded = store.Load();
 
-                Assert.Empty(loaded.WishlistEntries);
+                Assert.Empty(loaded.Wishlists);
                 Assert.False(File.Exists(dir.File("cache.json")));
                 Assert.Single(Directory.GetFiles(dir.Path, "cache.json.corrupt-*"));
             }
@@ -378,7 +386,7 @@ namespace GGDealsWishlist.Tests
                 File.WriteAllText(dir.File("state.json"), "{\"DataVersion\":7,\"Favourites\":[\"x\"]}");
                 var loaded = new VersionedJsonStore<LocalStateDocument>(dir.File("state.json"), 1).Load();
 
-                Assert.Empty(loaded.Favourites);
+                Assert.Empty(loaded.Scopes);
                 Assert.True(File.Exists(dir.File("state.json.v7.bak")));
             }
         }
@@ -391,12 +399,61 @@ namespace GGDealsWishlist.Tests
                 File.WriteAllText(dir.File("state.json"), "{\"DataVersion\":1,\"Favs\":[\"legacy\"]}");
                 var migrations = new Dictionary<int, Action<IDictionary<string, object>>>
                 {
-                    { 1, doc => { doc["Favourites"] = doc["Favs"]; doc.Remove("Favs"); } }
+                    {
+                        1, doc =>
+                        {
+                            doc["Scopes"] = new Dictionary<string, object> { { WishlistScope.OwnId, new Dictionary<string, object> { { "Favourites", doc["Favs"] } } } };
+                            doc.Remove("Favs");
+                        }
+                    }
                 };
                 var loaded = new VersionedJsonStore<LocalStateDocument>(dir.File("state.json"), 2, migrations).Load();
 
-                Assert.Equal(new[] { "legacy" }, loaded.Favourites);
+                Assert.Equal(new[] { "legacy" }, loaded.Scope(WishlistScope.OwnId).Favourites);
                 Assert.Equal(2, loaded.DataVersion);
+            }
+        }
+
+        [Fact]
+        public void A_version_1_state_file_becomes_the_own_wishlists_state()
+        {
+            using (var dir = new TempDir())
+            {
+                File.WriteAllText(dir.File("state.json"),
+                    "{\"DataVersion\":1,\"Favourites\":[\"steam:app:1\"],\"Collections\":[{\"Id\":\"c\",\"Name\":\"Buy Soon\"}],"
+                    + "\"Memberships\":{\"steam:app:1\":[\"c\"]},\"MatchOverrides\":{\"steam:app:2\":\"none\"}}");
+
+                var loaded = new VersionedJsonStore<LocalStateDocument>(dir.File("state.json"), LocalStateDocument.CurrentVersion, LocalStateDocument.Migrations).Load();
+
+                var own = loaded.Scope(WishlistScope.OwnId);
+                Assert.Equal(new[] { "steam:app:1" }, own.Favourites);
+                Assert.Equal("Buy Soon", own.Collections.Single().Name);
+                Assert.Equal("c", own.Memberships["steam:app:1"].Single());
+
+                // A match override describes the game, not a wishlist, so it stays shared.
+                Assert.Equal("none", loaded.MatchOverrides["steam:app:2"]);
+                Assert.Equal(LocalStateDocument.CurrentVersion, loaded.DataVersion);
+            }
+        }
+
+        [Fact]
+        public void A_version_1_cache_file_becomes_the_own_wishlists_snapshot()
+        {
+            using (var dir = new TempDir())
+            {
+                File.WriteAllText(dir.File("cache.json"),
+                    "{\"DataVersion\":1,\"WishlistProviderId\":\"manual\",\"WishlistEntries\":[{\"Key\":\"steam:app:1\",\"SteamId\":1,\"Title\":\"One\"}],"
+                    + "\"Prices\":{\"app:1\":{\"LookupKey\":\"app:1\",\"Found\":true,\"CurrentRetail\":9.99}}}");
+
+                var loaded = new VersionedJsonStore<CacheDocument>(dir.File("cache.json"), CacheDocument.CurrentVersion, CacheDocument.Migrations).Load();
+
+                var own = loaded.Wishlists[WishlistScope.OwnId];
+                Assert.Equal("manual", own.ProviderId);
+                Assert.Equal("One", own.Entries.Single().Title);
+
+                // A price does not depend on whose wishlist a game is on, so prices stay shared.
+                Assert.Equal(9.99m, loaded.Prices["app:1"].CurrentRetail);
+                Assert.Equal(CacheDocument.CurrentVersion, loaded.DataVersion);
             }
         }
     }
@@ -428,17 +485,33 @@ namespace GGDealsWishlist.Tests
                 Service = Create();
             }
 
+            /// <summary>Games per wishlist (manual-list text by scope id); a scope without an entry uses <see cref="ManualText"/>.</summary>
+            public readonly Dictionary<string, string> ScopeTexts = new Dictionary<string, string>();
+
+            /// <summary>Another person's wishlist the user can switch to, next to their own.</summary>
+            public void AddFriend(string steamId = "76561198000000001")
+            {
+                Options.Wishlists = WishlistScope.Build(new[] { new WishlistScope { Id = "friend", Name = "Alex", SteamId = steamId } });
+            }
+
             public WishlistDataService Create()
             {
                 var tracker = new RateLimitTracker(Clock);
                 var prices = new GGDealsApiPriceProvider(Api, tracker, () => Options.HasApiKey ? "key" : null, Clock, (s, t) => { Clock.Advance(s); return Task.CompletedTask; });
-                var registry = new WishlistProviderRegistry(new IGGDealsWishlistProvider[] { new ManualWishlistProvider(() => ManualEnabled, () => ManualText, Clock) });
-                return new WishlistDataService(registry, prices, tracker,
-                    new VersionedJsonStore<CacheDocument>(Dir.File("cache.json"), 1),
-                    new VersionedJsonStore<LocalStateDocument>(Dir.File("state.json"), 1),
+                WishlistDataService created = null;
+                var registry = new WishlistProviderRegistry(new IGGDealsWishlistProvider[]
+                {
+                    new ManualWishlistProvider(() => ManualEnabled, () => TextFor(created?.ActiveScopeId), Clock)
+                });
+                created = new WishlistDataService(registry, prices, tracker,
+                    new VersionedJsonStore<CacheDocument>(Dir.File("cache.json"), CacheDocument.CurrentVersion, CacheDocument.Migrations),
+                    new VersionedJsonStore<LocalStateDocument>(Dir.File("state.json"), LocalStateDocument.CurrentVersion, LocalStateDocument.Migrations),
                     Library, () => Options, Clock,
                     new VersionedJsonStore<PriceHistoryDocument>(Dir.File("price-history.json"), PriceHistoryDocument.CurrentVersion));
+                return created;
             }
+
+            private string TextFor(string scopeId) => scopeId != null && ScopeTexts.TryGetValue(scopeId, out var text) ? text : ManualText;
 
             public void Dispose()
             {
@@ -587,6 +660,227 @@ namespace GGDealsWishlist.Tests
                 Assert.NotNull(h.Service.GetPriceSeries("app:1"));
                 Assert.Null(h.Service.GetPriceSeries("app:2"));
             }
+        }
+
+        // -----------------------------------------------------------------------------------------
+        // Several wishlists: one is shown at a time and they are never combined
+        // -----------------------------------------------------------------------------------------
+
+        private static string[] Keys(WishlistDataService service) => service.Items.Select(i => i.Key).ToArray();
+
+        [Fact]
+        public async Task Switching_wishlists_shows_only_that_wishlists_games()
+        {
+            using (var h = new Harness())
+            {
+                h.AddFriend();
+                h.ScopeTexts[WishlistScope.OwnId] = "1\n2";
+                h.ScopeTexts["friend"] = "3";
+                await h.Service.InitializeAsync();
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                Assert.Equal(new[] { "steam:app:1", "steam:app:2" }, Keys(h.Service));
+
+                Assert.True(h.Service.SwitchTo("friend"));
+                await h.Service.SwitchRefreshTask;
+                Assert.Equal(new[] { "steam:app:3" }, Keys(h.Service));
+
+                Assert.True(h.Service.SwitchTo(WishlistScope.OwnId));
+                await h.Service.SwitchRefreshTask;
+                Assert.Equal(new[] { "steam:app:1", "steam:app:2" }, Keys(h.Service));
+            }
+        }
+
+        [Fact]
+        public async Task Switching_to_a_wishlist_that_does_not_exist_changes_nothing()
+        {
+            using (var h = new Harness())
+            {
+                await h.Service.InitializeAsync();
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+
+                Assert.False(h.Service.SwitchTo("nobody"));
+                Assert.Equal(WishlistScope.OwnId, h.Service.ActiveScopeId);
+                Assert.Equal(4, h.Service.Items.Count);
+            }
+        }
+
+        [Fact]
+        public async Task Favourites_and_collections_belong_to_one_wishlist()
+        {
+            using (var h = new Harness())
+            {
+                h.AddFriend();
+                h.ScopeTexts[WishlistScope.OwnId] = "1\n2";
+                h.ScopeTexts["friend"] = "1";
+                await h.Service.InitializeAsync();
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+
+                h.Service.SetFavourite("steam:app:1", true);
+                var collection = h.Service.CreateCollection("Buy Soon", null);
+                h.Service.SetCollectionMembership(new[] { "steam:app:1" }, collection.Id, true);
+                Assert.True(h.Service.Items.Single(i => i.Key == "steam:app:1").IsFavourite);
+
+                // The same game on the other wishlist is not starred and is in no collection.
+                h.Service.SwitchTo("friend");
+                await h.Service.SwitchRefreshTask;
+                var shared = h.Service.Items.Single();
+                Assert.False(shared.IsFavourite);
+                Assert.Empty(shared.CollectionIds);
+                Assert.Empty(h.Service.Collections);
+
+                h.Service.SwitchTo(WishlistScope.OwnId);
+                Assert.True(h.Service.Items.Single(i => i.Key == "steam:app:1").IsFavourite);
+                Assert.Single(h.Service.Collections);
+            }
+        }
+
+        [Fact]
+        public async Task Switching_wishlists_does_not_delete_the_price_history_of_the_other_wishlists_games()
+        {
+            using (var h = new Harness())
+            {
+                h.AddFriend();
+                h.ScopeTexts[WishlistScope.OwnId] = "1\n2";
+                h.ScopeTexts["friend"] = "3";
+                await h.Service.InitializeAsync();
+                PricedAt(h, 20m);
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+
+                h.Service.SwitchTo("friend");
+                await h.Service.SwitchRefreshTask;
+                Assert.NotNull(h.Service.GetPriceSeries("app:1"));
+                Assert.NotNull(h.Service.GetPriceSeries("app:3"));
+
+                // Refreshing your own wishlist again must not drop the history of a game only the friend has.
+                h.Service.SwitchTo(WishlistScope.OwnId);
+                h.Clock.Advance(TimeSpan.FromMinutes(20));
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                Assert.NotNull(h.Service.GetPriceSeries("app:3"));
+            }
+        }
+
+        [Fact]
+        public async Task The_wishlist_being_viewed_is_remembered_across_a_restart()
+        {
+            using (var h = new Harness())
+            {
+                h.AddFriend();
+                h.ScopeTexts[WishlistScope.OwnId] = "1\n2";
+                h.ScopeTexts["friend"] = "3";
+                await h.Service.InitializeAsync();
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                h.Service.SwitchTo("friend");
+                await h.Service.SwitchRefreshTask;
+                h.Service.FlushState();
+
+                var restarted = h.Create();
+                await restarted.InitializeAsync();
+
+                Assert.Equal("friend", restarted.ActiveScopeId);
+                Assert.Equal(new[] { "steam:app:3" }, Keys(restarted));
+                restarted.Dispose();
+            }
+        }
+
+        [Fact]
+        public async Task Removing_the_wishlist_being_viewed_returns_to_the_own_wishlist()
+        {
+            using (var h = new Harness())
+            {
+                h.AddFriend();
+                h.ScopeTexts[WishlistScope.OwnId] = "1\n2";
+                h.ScopeTexts["friend"] = "3";
+                await h.Service.InitializeAsync();
+                await h.Service.RefreshAsync(RefreshTrigger.Manual);
+                h.Service.SwitchTo("friend");
+                await h.Service.SwitchRefreshTask;
+
+                h.Options.Wishlists = WishlistScope.Build(null);
+                h.Service.OnOptionsChanged();
+
+                Assert.Equal(WishlistScope.OwnId, h.Service.ActiveScopeId);
+                Assert.Equal(new[] { "steam:app:1", "steam:app:2" }, Keys(h.Service));
+            }
+        }
+
+        [Fact]
+        public async Task Pointing_a_saved_wishlist_at_another_person_drops_the_previous_persons_games()
+        {
+            using (var h = new Harness())
+            {
+                h.AddFriend();
+                h.ScopeTexts["friend"] = "3";
+                await h.Service.InitializeAsync();
+                h.Service.SwitchTo("friend");
+                await h.Service.SwitchRefreshTask;
+                Assert.Equal(new[] { "steam:app:3" }, Keys(h.Service));
+
+                h.AddFriend("76561198000000002");
+                h.Service.OnOptionsChanged();
+
+                Assert.Empty(h.Service.Items);
+            }
+        }
+
+        [Fact]
+        public async Task A_refresh_that_finishes_after_switching_wishlists_is_dropped_not_filed_under_the_wrong_one()
+        {
+            using (var dir = new TempDir())
+            {
+                var clock = new FakeClock(Start);
+                var tracker = new RateLimitTracker(clock);
+                var prices = new GGDealsApiPriceProvider(new FakeApiClient(), tracker, () => "key", clock, (s, t) => { clock.Advance(s); return Task.CompletedTask; });
+                var gated = new GatedProvider();
+                var options = new ServiceOptions
+                {
+                    Region = "gb",
+                    HasApiKey = true,
+                    Wishlists = WishlistScope.Build(new[] { new WishlistScope { Id = "friend", Name = "Alex", SteamId = "76561198000000001" } })
+                };
+                using (var service = new WishlistDataService(
+                    new WishlistProviderRegistry(new IGGDealsWishlistProvider[] { gated }), prices, tracker,
+                    new VersionedJsonStore<CacheDocument>(dir.File("cache.json"), CacheDocument.CurrentVersion, CacheDocument.Migrations),
+                    new VersionedJsonStore<LocalStateDocument>(dir.File("state.json"), LocalStateDocument.CurrentVersion, LocalStateDocument.Migrations),
+                    new FakeLibrary(), () => options, clock))
+                {
+                    await service.InitializeAsync();
+                    var ownRefresh = service.RefreshAsync(RefreshTrigger.Manual);
+
+                    // The user switches while the first wishlist is still loading; the provider could have read either one.
+                    service.SwitchTo("friend");
+                    gated.Gate.SetResult(new WishlistFetchResult
+                    {
+                        State = WishlistProviderState.Available,
+                        Entries = { new WishlistEntry { Key = "steam:app:1", SteamId = 1, Title = "One", WishlistPosition = 1 } }
+                    });
+                    await ownRefresh;
+                    await service.SwitchRefreshTask;
+
+                    Assert.Equal("friend", service.ActiveScopeId);
+                    Assert.Empty(service.Items);
+                }
+            }
+        }
+
+        private sealed class GatedProvider : IGGDealsWishlistProvider
+        {
+            public readonly TaskCompletionSource<WishlistFetchResult> Gate = new TaskCompletionSource<WishlistFetchResult>();
+
+            public string Id => "gated";
+
+            public string DisplayName => "Gated";
+
+            public WishlistCapabilities Capabilities => WishlistCapabilities.None;
+
+            public string StateMessage => "Waiting";
+
+            public WishlistProviderState GetState() => WishlistProviderState.Available;
+
+            public Task<WishlistFetchResult> GetWishlistAsync(System.Threading.CancellationToken cancellationToken) => Gate.Task;
+
+            public Task<WishlistEntry> GetWishlistItemAsync(string key, System.Threading.CancellationToken cancellationToken) => Task.FromResult<WishlistEntry>(null);
+
+            public Task<WishlistFetchResult> RefreshAsync(System.Threading.CancellationToken cancellationToken) => Gate.Task;
         }
 
         [Fact]

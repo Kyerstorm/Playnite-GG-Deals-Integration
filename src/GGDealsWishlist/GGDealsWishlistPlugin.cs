@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using GGDealsWishlist.Api;
 using GGDealsWishlist.Infrastructure;
+using GGDealsWishlist.Models;
 using GGDealsWishlist.Providers;
 using GGDealsWishlist.Services;
 using GGDealsWishlist.Settings;
@@ -65,13 +66,17 @@ namespace GGDealsWishlist
             var rateLimits = new RateLimitTracker();
             apiClient = new GGDealsApiClient();
             var priceProvider = new GGDealsApiPriceProvider(apiClient, rateLimits, GetApiKey);
-            steamWishlist = new SteamWishlistProvider(() => settings.WishlistSource == WishlistSourceMode.SteamWishlist, () => settings.SteamId);
+            // The user's own wishlist follows the source chosen in settings. Another person's wishlist is always a public
+            // Steam wishlist, whatever the user's own source is, and uses that person's SteamID instead of the user's.
+            steamWishlist = new SteamWishlistProvider(
+                () => ActiveScope.UsesSteam(settings.WishlistSource == WishlistSourceMode.SteamWishlist),
+                () => ActiveScope.SteamIdFor(settings.SteamId));
             var registry = new WishlistProviderRegistry(new IGGDealsWishlistProvider[]
             {
                 // Preference order: an official provider will be inserted first once GG.deals offers one.
                 // Only the source selected in settings reports itself available.
                 steamWishlist,
-                new ManualWishlistProvider(() => settings.WishlistSource == WishlistSourceMode.ManualList, () => settings.ManualWishlist),
+                new ManualWishlistProvider(() => ActiveScope.UsesManualList(settings.WishlistSource == WishlistSourceMode.ManualList), () => settings.ManualWishlist),
                 new UnavailableWishlistProvider()
             });
 
@@ -79,8 +84,8 @@ namespace GGDealsWishlist
                 registry,
                 priceProvider,
                 rateLimits,
-                new VersionedJsonStore<CacheDocument>(Path.Combine(dataDirectory, "cache.json"), CacheDocument.CurrentVersion),
-                new VersionedJsonStore<LocalStateDocument>(Path.Combine(dataDirectory, "state.json"), LocalStateDocument.CurrentVersion),
+                new VersionedJsonStore<CacheDocument>(Path.Combine(dataDirectory, "cache.json"), CacheDocument.CurrentVersion, CacheDocument.Migrations),
+                new VersionedJsonStore<LocalStateDocument>(Path.Combine(dataDirectory, "state.json"), LocalStateDocument.CurrentVersion, LocalStateDocument.Migrations),
                 new PlayniteLibrarySource(api),
                 () => settings.ToServiceOptions(),
                 historyStore: new VersionedJsonStore<PriceHistoryDocument>(Path.Combine(dataDirectory, "price-history.json"), PriceHistoryDocument.CurrentVersion));
@@ -91,6 +96,9 @@ namespace GGDealsWishlist
         }
 
         public override Guid Id => PluginId;
+
+        /// <summary>The wishlist being viewed; the user's own until the service has loaded.</summary>
+        private WishlistScope ActiveScope => service?.ActiveScope ?? WishlistScope.Own();
 
         // =========================================================================================
         // Lifecycle
@@ -129,7 +137,7 @@ namespace GGDealsWishlist
         // Settings
         // =========================================================================================
 
-        public override ISettings GetSettings(bool firstRunSettings) => settingsViewModel ?? (settingsViewModel = new GGDealsSettingsViewModel(service, host));
+        public override ISettings GetSettings(bool firstRunSettings) => settingsViewModel ?? (settingsViewModel = new GGDealsSettingsViewModel(service, host, PlayniteHost.CheckSteamWishlistAsync));
 
         public override UserControl GetSettingsView(bool firstRunSettings) => new GGDealsSettingsView((GGDealsSettingsViewModel)GetSettings(firstRunSettings));
 

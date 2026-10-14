@@ -154,7 +154,7 @@
                     <TextBox Text="{Binding SteamId, UpdateSourceTrigger=PropertyChanged, Delay=300}" Padding="3" MinWidth="300" MaxWidth="420" HorizontalAlignment="Left"
                              AutomationProperties.Name="SteamID64" />
                 </DockPanel>
-                <TextBlock Style="{StaticResource Hint}" Text="Your 17-digit Steam ID (starts with 7656119) or a steamcommunity.com/profiles/… link. The wishlist refreshes together with prices." />
+                <TextBlock Style="{StaticResource Hint}" Text="Your 17-digit Steam ID (starts with 7656119), or paste your Steam wishlist link (store.steampowered.com/wishlist/profiles/…) or profile link (steamcommunity.com/profiles/…). The wishlist refreshes together with prices." />
                 <TextBlock Text="{Binding SteamIdValidationText}" Foreground="{DynamicResource GG.Error}" TextWrapping="Wrap"
                            Visibility="{Binding SteamIdValidationText, Converter={StaticResource Vis}}" />
             </StackPanel>
@@ -171,6 +171,37 @@
                 <TextBox Text="{Binding Settings.GGDealsWishlistUrl}" Padding="3" MaxWidth="420" HorizontalAlignment="Left" MinWidth="300" />
             </DockPanel>
             <TextBlock Style="{StaticResource Hint}" Text="Opened by &quot;Open GG.deals Wishlist ↗&quot;. Paste your public wishlist link here to open it directly." />
+
+            <!-- ============================== Other people's wishlists ============================== -->
+            <TextBlock Style="{StaticResource Section}" Text="Other people's wishlists" />
+            <TextBlock Style="{StaticResource Hint}"
+                       Text="Add someone else's public Steam wishlist, then switch to it from the drop-down at the top of the sidebar. Each wishlist is shown on its own and is never combined with yours or with another one. Favourites and collections are kept separately for each wishlist. A wishlist must be public to be read." />
+            <ItemsControl ItemsSource="{Binding OtherWishlists}" Margin="0,4,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,0,0,10">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource Action}" Content="Remove" Command="{Binding RemoveCommand}" Margin="6,0,0,0" />
+                                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Label}" Text="Name" />
+                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Padding="3" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200"
+                                         AutomationProperties.Name="Wishlist name" />
+                            </DockPanel>
+                            <DockPanel Margin="0,4,0,0">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource Action}" Content="Check" Command="{Binding CheckCommand}" Margin="6,0,0,0" />
+                                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Label}" Text="SteamID64" />
+                                <TextBox Text="{Binding SteamId, UpdateSourceTrigger=PropertyChanged, Delay=300}" Padding="3" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200"
+                                         AutomationProperties.Name="SteamID64 of this wishlist" />
+                            </DockPanel>
+                            <TextBlock Text="{Binding ValidationText}" Foreground="{DynamicResource GG.Error}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                       Visibility="{Binding ValidationText, Converter={StaticResource Vis}}" />
+                            <TextBlock Text="{Binding CheckStatus}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                       Visibility="{Binding CheckStatus, Converter={StaticResource Vis}}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Style="{StaticResource Action}" Content="Add a wishlist" Command="{Binding AddWishlistCommand}" HorizontalAlignment="Left" />
+            <TextBlock Style="{StaticResource Hint}" Text="Paste their shared Steam wishlist link (store.steampowered.com/wishlist/profiles/…), a profile link (steamcommunity.com/profiles/…) or their 17-digit Steam ID (starts with 7656119). Links that use a custom name (…/id/name) cannot be read." />
 
             <!-- ============================== Appearance ============================== -->
             <TextBlock Style="{StaticResource Section}" Text="Appearance" />

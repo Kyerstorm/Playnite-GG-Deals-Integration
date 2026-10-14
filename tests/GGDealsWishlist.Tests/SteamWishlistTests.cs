@@ -21,6 +21,9 @@ namespace GGDealsWishlist.Tests
         [InlineData("  76561197960287930  ", 76561197960287930UL)]
         [InlineData("https://steamcommunity.com/profiles/76561197960287930/", 76561197960287930UL)]
         [InlineData("steamcommunity.com/profiles/76561197960287930", 76561197960287930UL)]
+        [InlineData("https://store.steampowered.com/wishlist/profiles/76561199705182656/?sort=name", 76561199705182656UL)]
+        [InlineData("store.steampowered.com/wishlist/profiles/76561199705182656", 76561199705182656UL)]
+        [InlineData("  HTTPS://STORE.STEAMPOWERED.COM/wishlist/profiles/76561199705182656/#sort=name  ", 76561199705182656UL)]
         public void Accepts_ids_and_profile_links(string input, ulong expected)
         {
             Assert.True(SteamIdParser.TryParse(input, out var id));
@@ -35,6 +38,8 @@ namespace GGDealsWishlist.Tests
         [InlineData("76561197960265728")] // the base value itself is not an individual account
         [InlineData("96561197960287930")]
         [InlineData("https://steamcommunity.com/id/gabelogannewell")]
+        [InlineData("https://store.steampowered.com/wishlist/id/gabelogannewell/?sort=name")]
+        [InlineData("https://store.steampowered.com/wishlist/profiles/1234/")]
         public void Rejects_invalid_input(string input)
         {
             Assert.False(SteamIdParser.TryParse(input, out _));

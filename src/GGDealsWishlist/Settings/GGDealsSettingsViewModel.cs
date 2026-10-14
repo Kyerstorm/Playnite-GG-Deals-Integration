@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -36,12 +37,16 @@ namespace GGDealsWishlist.Settings
         private bool isTesting;
         private string manualListInfo;
         private string actionStatus;
+        private readonly Func<string, Task<WishlistFetchResult>> checkSteam;
 
-        public GGDealsSettingsViewModel(WishlistDataService service, IHostServices host)
+        /// <param name="checkSteam">Reads one public Steam wishlist once, so a saved wishlist can be tried out. Null hides the check.</param>
+        public GGDealsSettingsViewModel(WishlistDataService service, IHostServices host, Func<string, Task<WishlistFetchResult>> checkSteam = null)
         {
             this.service = service;
             this.host = host;
+            this.checkSteam = checkSteam;
             settings = host.Settings.Clone();
+            LoadWishlistRows();
 
             TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync, () => !IsTesting && (HasPendingKey || (HasStoredKey && !removeKeyOnSave)));
             RemoveKeyCommand = new RelayCommand(RemoveKey, () => (HasStoredKey && !removeKeyOnSave) || HasPendingKey);
@@ -57,6 +62,7 @@ namespace GGDealsWishlist.Settings
             ResetAccentCommand = new RelayCommand(() => AccentColor = GGDealsSettings.DefaultAccentColor);
             ResetFieldsCommand = new RelayCommand(ResetInformationFields);
             UpdateUsageCommand = new RelayCommand(UpdateUsage);
+            AddWishlistCommand = new RelayCommand(AddWishlistRow);
             UpdateManualListInfo();
             UpdateUsage();
         }
@@ -305,6 +311,73 @@ namespace GGDealsWishlist.Settings
         }
 
         // =========================================================================================
+        // Other people's wishlists (each is shown on its own in the sidebar, never combined)
+        // =========================================================================================
+
+        /// <summary>The saved wishlists being edited. Copied into the settings copy when the page is saved.</summary>
+        public ObservableCollection<SavedWishlistRow> OtherWishlists { get; } = new ObservableCollection<SavedWishlistRow>();
+
+        public bool HasOtherWishlists => OtherWishlists.Count > 0;
+
+        private void LoadWishlistRows()
+        {
+            OtherWishlists.Clear();
+            foreach (var saved in settings.OtherWishlists ?? new List<SavedWishlist>())
+            {
+                OtherWishlists.Add(new SavedWishlistRow(saved, checkSteam, RemoveWishlistRow));
+            }
+
+            OnPropertyChanged(nameof(HasOtherWishlists));
+        }
+
+        private void AddWishlistRow()
+        {
+            OtherWishlists.Add(new SavedWishlistRow(null, checkSteam, RemoveWishlistRow));
+            OnPropertyChanged(nameof(HasOtherWishlists));
+        }
+
+        private void RemoveWishlistRow(SavedWishlistRow row)
+        {
+            // Removing a wishlist also forgets what was stored for it (its games, favourites and collections).
+            var label = row.DisplayName;
+            if (!string.IsNullOrEmpty(label) && !host.Confirm("Remove " + label + "'s wishlist? Its favourites and collections are deleted when you save.", "Remove wishlist"))
+            {
+                return;
+            }
+
+            OtherWishlists.Remove(row);
+            OnPropertyChanged(nameof(HasOtherWishlists));
+        }
+
+        private void CommitWishlistRows()
+        {
+            settings.OtherWishlists = OtherWishlists.Select(r => r.ToSaved()).ToList();
+        }
+
+        /// <summary>Problems with the saved wishlists, worded for the settings page's error list.</summary>
+        private IEnumerable<string> VerifyWishlistRows()
+        {
+            var seen = new HashSet<ulong>();
+            if (SteamIdParser.TryParse(settings.SteamId, out var own))
+            {
+                seen.Add(own);
+            }
+
+            foreach (var row in OtherWishlists)
+            {
+                var problem = row.ValidationText;
+                if (problem != null)
+                {
+                    yield return (string.IsNullOrWhiteSpace(row.Name) ? "A saved wishlist" : row.DisplayName + "'s wishlist") + ": " + problem;
+                }
+                else if (SteamIdParser.TryParse(row.SteamId, out var id) && !seen.Add(id))
+                {
+                    yield return row.DisplayName + "'s wishlist is already listed (or is your own wishlist). Each wishlist can only be added once.";
+                }
+            }
+        }
+
+        // =========================================================================================
         // Appearance
         // =========================================================================================
 
@@ -360,6 +433,7 @@ namespace GGDealsWishlist.Settings
         public ICommand ResetAccentCommand { get; }
         public ICommand ResetFieldsCommand { get; }
         public ICommand UpdateUsageCommand { get; }
+        public ICommand AddWishlistCommand { get; }
 
         /// <summary>Raised when the view should clear its PasswordBox.</summary>
         public event EventHandler PendingKeyCleared;
@@ -371,6 +445,7 @@ namespace GGDealsWishlist.Settings
         public void BeginEdit()
         {
             Settings = host.Settings.Clone();
+            LoadWishlistRows();
             ClearPendingKey();
             removeKeyOnSave = false;
             ConnectionStatus = null;
@@ -385,10 +460,12 @@ namespace GGDealsWishlist.Settings
             ClearPendingKey();
             removeKeyOnSave = false;
             Settings = host.Settings.Clone();
+            LoadWishlistRows();
         }
 
         public void EndEdit()
         {
+            CommitWishlistRows();
             var edited = settings.Clone();
             edited.Normalize();
             if (removeKeyOnSave)
@@ -408,6 +485,7 @@ namespace GGDealsWishlist.Settings
             removeKeyOnSave = false;
             host.UpdateSettings(s => s.CopyFrom(edited));
             Settings = host.Settings.Clone();
+            LoadWishlistRows();
             OnAllPropertiesChanged();
         }
 
@@ -437,6 +515,8 @@ namespace GGDealsWishlist.Settings
             {
                 errors.Add(SteamIdParser.Describe(settings.SteamId));
             }
+
+            errors.AddRange(VerifyWishlistRows());
 
             if (AccentValidationText != null)
             {

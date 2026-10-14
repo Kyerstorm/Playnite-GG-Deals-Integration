@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using GGDealsWishlist.Api;
 using GGDealsWishlist.Infrastructure;
@@ -24,20 +25,39 @@ namespace GGDealsWishlist.Services
         public string Source { get; set; }
     }
 
-    /// <summary>Persistent cache of provider data (wishlist + prices). Separate refresh timestamps per data type.</summary>
+    /// <summary>One wishlist's cached entries and refresh bookkeeping. Each wishlist has its own snapshot; they are never merged.</summary>
+    public sealed class WishlistSnapshot
+    {
+        public string ProviderId { get; set; }
+
+        /// <summary>SteamID64 these entries were loaded for (saved wishlists only). If it changes, the entries are discarded.</summary>
+        public string SteamId { get; set; }
+
+        public List<WishlistEntry> Entries { get; set; } = new List<WishlistEntry>();
+
+        public DateTime? UpdatedUtc { get; set; }
+
+        public DateTime? AttemptUtc { get; set; }
+
+        /// <summary>Error from this wishlist's last refresh (wishlist or prices); null after a clean refresh.</summary>
+        public ErrorRecord LastError { get; set; }
+
+        public void Normalize()
+        {
+            Entries = Entries ?? new List<WishlistEntry>();
+        }
+    }
+
+    /// <summary>Persistent cache of provider data (wishlists + prices). Separate refresh timestamps per data type.</summary>
     public sealed class CacheDocument
     {
-        public const int CurrentVersion = 1;
+        /// <summary>Version 2 keys the wishlist data by scope id; prices stay shared because a price does not depend on whose list a game is on.</summary>
+        public const int CurrentVersion = 2;
 
         public int DataVersion { get; set; } = CurrentVersion;
 
-        public string WishlistProviderId { get; set; }
-
-        public List<WishlistEntry> WishlistEntries { get; set; } = new List<WishlistEntry>();
-
-        public DateTime? WishlistUpdatedUtc { get; set; }
-
-        public DateTime? WishlistAttemptUtc { get; set; }
+        /// <summary>Scope id ("own" or a saved wishlist id) → that wishlist's snapshot.</summary>
+        public Dictionary<string, WishlistSnapshot> Wishlists { get; set; } = new Dictionary<string, WishlistSnapshot>();
 
         /// <summary>Lookup key ("app:420") → cached price.</summary>
         public Dictionary<string, PriceData> Prices { get; set; } = new Dictionary<string, PriceData>();
@@ -46,13 +66,60 @@ namespace GGDealsWishlist.Services
 
         public DateTime? PricesAttemptUtc { get; set; }
 
-        public ErrorRecord LastError { get; set; }
-
         public RateLimitState RateLimit { get; set; }
+
+        /// <summary>Version 1 → 2: the single wishlist becomes the user's own wishlist snapshot.</summary>
+        public static readonly IReadOnlyDictionary<int, Action<IDictionary<string, object>>> Migrations =
+            new Dictionary<int, Action<IDictionary<string, object>>>
+            {
+                {
+                    1, root =>
+                    {
+                        var own = new Dictionary<string, object>();
+                        StoreMigration.Move(root, "WishlistProviderId", own, "ProviderId");
+                        StoreMigration.Move(root, "WishlistEntries", own, "Entries");
+                        StoreMigration.Move(root, "WishlistUpdatedUtc", own, "UpdatedUtc");
+                        StoreMigration.Move(root, "WishlistAttemptUtc", own, "AttemptUtc");
+                        StoreMigration.Move(root, "LastError", own, "LastError");
+                        root["Wishlists"] = new Dictionary<string, object> { { WishlistScope.OwnId, own } };
+                    }
+                }
+            };
+
+        public void Normalize()
+        {
+            Prices = Prices ?? new Dictionary<string, PriceData>();
+            Wishlists = Wishlists ?? new Dictionary<string, WishlistSnapshot>();
+            foreach (var key in Wishlists.Keys.ToList())
+            {
+                if (Wishlists[key] == null)
+                {
+                    Wishlists[key] = new WishlistSnapshot();
+                }
+
+                Wishlists[key].Normalize();
+            }
+        }
+    }
+
+    internal static class StoreMigration
+    {
+        /// <summary>Moves a value between loose JSON objects, keeping an explicit null; does nothing when the key is absent.</summary>
+        public static void Move(IDictionary<string, object> from, string fromKey, IDictionary<string, object> to, string toKey)
+        {
+            if (from.TryGetValue(fromKey, out var value))
+            {
+                to[toKey] = value;
+                from.Remove(fromKey);
+            }
+        }
     }
 
     public sealed class UiState
     {
+        /// <summary>Scope id of the wishlist being viewed; null or unknown means the user's own wishlist.</summary>
+        public string ActiveWishlistId { get; set; }
+
         public ViewMode ViewMode { get; set; } = ViewMode.CoverInfo;
 
         public bool ViewModeChosen { get; set; }
@@ -62,19 +129,62 @@ namespace GGDealsWishlist.Services
         public FilterState Filter { get; set; } = new FilterState();
     }
 
-    /// <summary>User-owned local organisation data (never sent anywhere).</summary>
-    public sealed class LocalStateDocument
+    /// <summary>Favourites and collections of one wishlist. A game starred on one wishlist is not starred on another.</summary>
+    public sealed class ScopeLocalState
     {
-        public const int CurrentVersion = 1;
-
-        public int DataVersion { get; set; } = CurrentVersion;
-
         public List<string> Favourites { get; set; } = new List<string>();
 
         public List<WishlistCollection> Collections { get; set; } = new List<WishlistCollection>();
 
         /// <summary>Wishlist item key → collection ids.</summary>
         public Dictionary<string, List<string>> Memberships { get; set; } = new Dictionary<string, List<string>>();
+
+        public void Normalize()
+        {
+            Favourites = Favourites ?? new List<string>();
+            Collections = Collections ?? new List<WishlistCollection>();
+            Memberships = Memberships ?? new Dictionary<string, List<string>>();
+        }
+    }
+
+    /// <summary>User-owned local organisation data (never sent anywhere).</summary>
+    public sealed class LocalStateDocument
+    {
+        /// <summary>Version 2 keys favourites, collections and memberships by wishlist scope id.</summary>
+        public const int CurrentVersion = 2;
+
+        public int DataVersion { get; set; } = CurrentVersion;
+
+        /// <summary>Scope id ("own" or a saved wishlist id) → favourites and collections of that wishlist.</summary>
+        public Dictionary<string, ScopeLocalState> Scopes { get; set; } = new Dictionary<string, ScopeLocalState>();
+
+        /// <summary>Version 1 → 2: the existing favourites and collections become the user's own wishlist's.</summary>
+        public static readonly IReadOnlyDictionary<int, Action<IDictionary<string, object>>> Migrations =
+            new Dictionary<int, Action<IDictionary<string, object>>>
+            {
+                {
+                    1, root =>
+                    {
+                        var own = new Dictionary<string, object>();
+                        StoreMigration.Move(root, "Favourites", own, "Favourites");
+                        StoreMigration.Move(root, "Collections", own, "Collections");
+                        StoreMigration.Move(root, "Memberships", own, "Memberships");
+                        root["Scopes"] = new Dictionary<string, object> { { WishlistScope.OwnId, own } };
+                    }
+                }
+            };
+
+        /// <summary>The state of one wishlist, created on first use.</summary>
+        public ScopeLocalState Scope(string scopeId)
+        {
+            if (!Scopes.TryGetValue(scopeId, out var scope) || scope == null)
+            {
+                scope = new ScopeLocalState();
+                Scopes[scopeId] = scope;
+            }
+
+            return scope;
+        }
 
         /// <summary>Wishlist item key → confirmed Playnite game id, or "none" for a rejected match.</summary>
         public Dictionary<string, string> MatchOverrides { get; set; } = new Dictionary<string, string>();
@@ -87,9 +197,13 @@ namespace GGDealsWishlist.Services
         public void Normalize()
         {
             CoverOverrides = CoverOverrides ?? new Dictionary<string, string>();
-            Favourites = Favourites ?? new List<string>();
-            Collections = Collections ?? new List<WishlistCollection>();
-            Memberships = Memberships ?? new Dictionary<string, List<string>>();
+            Scopes = Scopes ?? new Dictionary<string, ScopeLocalState>();
+            foreach (var key in Scopes.Keys.ToList())
+            {
+                Scopes[key] = Scopes[key] ?? new ScopeLocalState();
+                Scopes[key].Normalize();
+            }
+
             MatchOverrides = MatchOverrides ?? new Dictionary<string, string>();
             Ui = Ui ?? new UiState();
             Ui.Filter = Ui.Filter ?? new FilterState();

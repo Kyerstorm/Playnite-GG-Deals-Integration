@@ -49,6 +49,9 @@ namespace GGDealsWishlist.ViewModels
 
         public bool IsSteamSource { get; set; }
 
+        /// <summary>True while another person's wishlist is shown. Their privacy settings are theirs, so none can be offered.</summary>
+        public bool IsOtherWishlist { get; set; }
+
         public string SearchText { get; set; }
 
         /// <summary>Number of active filters, not counting the search box.</summary>
@@ -87,6 +90,11 @@ namespace GGDealsWishlist.ViewModels
                 case SidebarState.Error:
                     return ForError(input);
                 case SidebarState.EmptyWishlist:
+                    if (input.IsOtherWishlist)
+                    {
+                        return OtherWishlist();
+                    }
+
                     return new StateGuidance(null, new[]
                     {
                         new StateAction(StateActionKind.Refresh, "Refresh", isPrimary: true),
@@ -94,6 +102,11 @@ namespace GGDealsWishlist.ViewModels
                         WishlistSettings()
                     });
                 case SidebarState.WishlistUnavailable:
+                    if (input.IsOtherWishlist)
+                    {
+                        return OtherWishlist();
+                    }
+
                     return input.IsSteamSource
                         ? new StateGuidance(null, new[] { new StateAction(StateActionKind.Refresh, "Refresh", isPrimary: true), SteamPrivacy(), WishlistSettings() })
                         : new StateGuidance(null, new[] { new StateAction(StateActionKind.OpenGGDeals, "Open GG.deals", isPrimary: true), WishlistSettings() });
@@ -177,6 +190,13 @@ namespace GGDealsWishlist.ViewModels
                 ? "Retry in " + Math.Ceiling(seconds).ToString(CultureInfo.InvariantCulture) + " s"
                 : "Retry in " + Math.Ceiling(seconds / 60).ToString(CultureInfo.InvariantCulture) + " min";
         }
+
+        /// <summary>Someone else's list: retrying or correcting their SteamID is all the user can do, so no privacy shortcut is offered.</summary>
+        private static StateGuidance OtherWishlist() => new StateGuidance(null, new[]
+        {
+            new StateAction(StateActionKind.Refresh, "Refresh", isPrimary: true),
+            new StateAction(StateActionKind.OpenSettings, "Manage wishlists")
+        });
 
         private static StateAction SteamPrivacy() => new StateAction(StateActionKind.OpenSteamPrivacy, "Steam privacy settings");
 

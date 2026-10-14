@@ -28,8 +28,10 @@ namespace GGDealsWishlist.ViewModels
 
         public string Message { get; private set; }
 
-        public static SteamCheckResult From(WishlistFetchResult result)
+        /// <param name="owner">Whose wishlist was checked, for another person's list; null means the user's own ("your").</param>
+        public static SteamCheckResult From(WishlistFetchResult result, string owner = null)
         {
+            var whose = string.IsNullOrWhiteSpace(owner) ? "your" : owner.Trim() + "'s";
             if (result != null && result.State == WishlistProviderState.Available)
             {
                 var count = result.Entries?.Count ?? 0;
@@ -38,14 +40,16 @@ namespace GGDealsWishlist.ViewModels
                     return new SteamCheckResult
                     {
                         IsOk = true,
-                        Message = "✓ Found " + count.ToString(CultureInfo.CurrentCulture) + (count == 1 ? " game" : " games") + " on your Steam wishlist."
+                        Message = "✓ Found " + count.ToString(CultureInfo.CurrentCulture) + (count == 1 ? " game" : " games") + " on " + whose + " Steam wishlist."
                     };
                 }
 
                 // Steam answers the same way for an empty list and a private profile, so say both.
                 return new SteamCheckResult
                 {
-                    Message = result.Message ?? "Your Steam wishlist is empty or private. Set \"Game details\" to Public in your Steam privacy settings."
+                    Message = string.IsNullOrWhiteSpace(owner)
+                        ? result.Message ?? "Your Steam wishlist is empty or private. Set \"Game details\" to Public in your Steam privacy settings."
+                        : whose + " Steam wishlist is empty, or it is private. Only public wishlists can be shown."
                 };
             }
 

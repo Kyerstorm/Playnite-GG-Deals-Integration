@@ -36,6 +36,24 @@ namespace GGDealsWishlist.ViewModels
         Busy = 4
     }
 
+    /// <summary>One entry of the wishlist switcher: a wishlist, or the "Manage wishlists…" shortcut at the end.</summary>
+    public sealed class WishlistChoice
+    {
+        public WishlistChoice(string id, string name, bool isManage = false)
+        {
+            Id = id;
+            Name = name;
+            IsManage = isManage;
+        }
+
+        public string Id { get; }
+
+        public string Name { get; }
+
+        /// <summary>True for the shortcut that opens the settings instead of switching.</summary>
+        public bool IsManage { get; }
+    }
+
     /// <summary>
     /// View model for the GG.deals sidebar. Search, filtering and sorting run locally over the service's
     /// snapshot; only the explicit refresh command (or the scheduler) ever reaches the network.
@@ -71,6 +89,9 @@ namespace GGDealsWishlist.ViewModels
         private bool justRefreshed;
         private int visibleCount;
         private IReadOnlyList<WishlistCollection> collections = new List<WishlistCollection>();
+        private WishlistChoice selectedWishlist;
+        private bool rebuildingWishlists;
+        private string shownScopeId;
 
         public SidebarViewModel(WishlistDataService service, IHostServices host)
         {
@@ -131,7 +152,7 @@ namespace GGDealsWishlist.ViewModels
             ConfirmMatchCommand = new RelayCommand(p => ConfirmMatch(p as WishlistItemViewModel));
             RejectMatchCommand = new RelayCommand(p => SetMatch(p as WishlistItemViewModel, PlayniteMatcher.RejectedOverride));
             ResetMatchCommand = new RelayCommand(p => SetMatch(p as WishlistItemViewModel, null));
-            OpenWishlistCommand = new RelayCommand(() => OpenUrl(host.Settings.GGDealsWishlistUrl));
+            OpenWishlistCommand = new RelayCommand(() => OpenUrl(OpenWishlistUrl));
             OpenAttributionCommand = new RelayCommand(p => OpenUrl((p as WishlistItemViewModel)?.GGDealsUrl ?? GGDealsHomeUrl));
             OpenApiInfoCommand = new RelayCommand(() => OpenUrl(ApiInfoUrl));
             ManageCollectionsCommand = new RelayCommand(() => host.ShowCollectionsManager());
@@ -143,8 +164,96 @@ namespace GGDealsWishlist.ViewModels
             service.StatusChanged += OnServiceStatusChanged;
             host.SettingsChanged += OnSettingsChanged;
 
+            RebuildWishlists();
             OnDataChanged();
             OnStatusChanged();
+        }
+
+        // =========================================================================================
+        // Wishlist switcher (own wishlist + other people's; only one is ever shown)
+        // =========================================================================================
+
+        public ObservableCollection<WishlistChoice> Wishlists { get; } = new ObservableCollection<WishlistChoice>();
+
+        /// <summary>The switcher only appears once another wishlist has been added, so nothing changes for everyone else.</summary>
+        public bool HasOtherWishlists => service.Scopes.Count > 1;
+
+        public WishlistChoice SelectedWishlist
+        {
+            get => selectedWishlist;
+            set
+            {
+                if (rebuildingWishlists || value == null || ReferenceEquals(value, selectedWishlist))
+                {
+                    return;
+                }
+
+                if (value.IsManage)
+                {
+                    host.OpenSettings();
+
+                    // The combo box now shows "Manage wishlists…"; put the real selection back once this change has finished.
+                    host.Dispatcher.BeginInvoke(new Action(() => OnPropertyChanged(nameof(SelectedWishlist))), DispatcherPriority.Background);
+                    return;
+                }
+
+                selectedWishlist = value;
+                OnPropertyChanged(nameof(SelectedWishlist));
+                service.SwitchTo(value.Id);
+            }
+        }
+
+        /// <summary>True while another person's wishlist is shown instead of the user's own.</summary>
+        public bool IsOtherWishlistActive => !service.ActiveScope.IsOwn;
+
+        public string ActiveWishlistName => service.ActiveScope.Name;
+
+        private string OpenWishlistUrl
+        {
+            get
+            {
+                var scope = service.ActiveScope;
+                return scope.IsOwn
+                    ? host.Settings.GGDealsWishlistUrl
+                    : "https://store.steampowered.com/wishlist/profiles/" + scope.SteamId + "/";
+            }
+        }
+
+        public string OpenWishlistText => IsOtherWishlistActive ? "Open Steam wishlist ↗" : "Open GG.deals Wishlist ↗";
+
+        private void RebuildWishlists()
+        {
+            rebuildingWishlists = true;
+            try
+            {
+                var scopes = service.Scopes;
+                var activeId = service.ActiveScopeId;
+                Wishlists.Clear();
+                foreach (var scope in scopes)
+                {
+                    Wishlists.Add(new WishlistChoice(scope.Id, scope.Name));
+                }
+
+                if (scopes.Count > 1)
+                {
+                    Wishlists.Add(new WishlistChoice(string.Empty, "Manage wishlists…", isManage: true));
+                }
+
+                selectedWishlist = Wishlists.FirstOrDefault(w => !w.IsManage && w.Id == activeId) ?? Wishlists.FirstOrDefault();
+            }
+            finally
+            {
+                rebuildingWishlists = false;
+            }
+
+            OnPropertyChanged(nameof(HasOtherWishlists));
+            OnPropertyChanged(nameof(SelectedWishlist));
+            OnPropertyChanged(nameof(IsOtherWishlistActive));
+            OnPropertyChanged(nameof(ActiveWishlistName));
+            OnPropertyChanged(nameof(OpenWishlistText));
+            OnPropertyChanged(nameof(EmptyMessage));
+            OnPropertyChanged(nameof(UnavailableMessage));
+            OnPropertyChanged(nameof(WarningTitle));
         }
 
         // =========================================================================================
@@ -188,13 +297,18 @@ namespace GGDealsWishlist.ViewModels
         public string ProviderMessage => status.ProviderMessage;
 
         /// <summary>Card text when there is nothing to show; comes from the active wishlist source when it has a specific reason.</summary>
-        public string UnavailableMessage => status.ProviderId == UnavailableWishlistProvider.ProviderId || string.IsNullOrEmpty(status.ProviderMessage)
-            ? "Wishlist access is not currently available through the configured GG.deals API."
-            : status.ProviderMessage;
+        public string UnavailableMessage => IsOtherWishlistActive
+            ? ActiveWishlistName + "'s Steam wishlist can't be loaded. Check the SteamID64 in the extension settings."
+            : status.ProviderId == UnavailableWishlistProvider.ProviderId || string.IsNullOrEmpty(status.ProviderMessage)
+                ? "Wishlist access is not currently available through the configured GG.deals API."
+                : status.ProviderMessage;
 
-        public string EmptyMessage => status.ProviderId == SteamWishlistProvider.ProviderId && !string.IsNullOrEmpty(status.ProviderMessage)
-            ? status.ProviderMessage
-            : "Your wishlist appears to be empty.";
+        // Steam's own message says "your" and points at the user's privacy settings, which cannot help for someone else's list.
+        public string EmptyMessage => IsOtherWishlistActive
+            ? ActiveWishlistName + "'s wishlist is empty, or it is private. Only public Steam wishlists can be shown."
+            : status.ProviderId == SteamWishlistProvider.ProviderId && !string.IsNullOrEmpty(status.ProviderMessage)
+                ? status.ProviderMessage
+                : "Your wishlist appears to be empty.";
 
         public bool IsSteamSource => status.ProviderId == SteamWishlistProvider.ProviderId;
 
@@ -300,7 +414,7 @@ namespace GGDealsWishlist.ViewModels
             {
                 if (!string.IsNullOrEmpty(status.LastError?.Source))
                 {
-                    return "⚠ Unable to refresh your " + status.LastError.Source;
+                    return "⚠ Unable to refresh " + (IsOtherWishlistActive ? ActiveWishlistName + "'s " : "your ") + status.LastError.Source;
                 }
 
                 switch (status.LastError?.Kind ?? ApiErrorKind.None)
@@ -789,6 +903,7 @@ namespace GGDealsWishlist.ViewModels
                 RetryAfterUtc = status.LastError?.RetryAfterUtc,
                 NowUtc = DateTime.UtcNow,
                 IsSteamSource = IsSteamSource,
+                IsOtherWishlist = IsOtherWishlistActive,
                 SearchText = searchText,
                 FilterCount = filter.ActiveCount
             });
@@ -1094,6 +1209,7 @@ namespace GGDealsWishlist.ViewModels
             OnPropertyChanged(nameof(HideOwned));
             OnPropertyChanged(nameof(HasApiKey));
             OnPropertyChanged(nameof(PriceOptions));
+            RebuildWishlists();
             ApplyQuery(false);
             UpdateStatus();
         }
@@ -1102,6 +1218,19 @@ namespace GGDealsWishlist.ViewModels
         {
             try
             {
+                // A different wishlist is now shown (switched here, or the active one was removed in the settings).
+                // Nothing of the previous one may carry over: cached rows, the open details card, collection filters.
+                var scopeId = service.ActiveScopeId;
+                var scopeChanged = scopeId != shownScopeId;
+                var firstLoad = shownScopeId == null;
+                if (scopeChanged)
+                {
+                    shownScopeId = scopeId;
+                    itemCache.Clear();
+                    SelectedDetail = null;
+                    RebuildWishlists();
+                }
+
                 collections = service.Collections;
                 RebuildCollectionFilters();
                 var snapshot = service.Items;
@@ -1137,9 +1266,14 @@ namespace GGDealsWishlist.ViewModels
                     SelectedDetail = null;
                 }
 
-                ApplyQuery(false);
+                ApplyQuery(scopeChanged && !firstLoad);
                 OnPropertyChanged(nameof(Collections));
                 OnPropertyChanged(nameof(PriceOptions));
+                if (scopeChanged && !firstLoad)
+                {
+                    // Collection ids from the previous wishlist were dropped from the filter above; keep that.
+                    SaveUiState();
+                }
             }
             catch (Exception e)
             {
